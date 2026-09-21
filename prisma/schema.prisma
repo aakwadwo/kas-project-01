@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(STUDENT)
+  createdAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organizedEvents Event[]        @relation("EventOrganizer")
+  registrations   Registration[]
+  checkIns        Attendance[]
+}
+
+enum Role {
+  STUDENT
+  ORGANIZER
+  ADMIN
+}
+
+model Event {
+  id          String      @id @default(uuid())
+  title       String
+  description String
+  location    String
+  startTime   DateTime
+  endTime     DateTime
+  capacity    Int
+  status      EventStatus @default(DRAFT)
+  organizerId String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  organizer     User           @relation("EventOrganizer", fields: [organizerId], references: [id])
+  registrations Registration[]
+  attendance    Attendance[]
+
+  @@index([organizerId])
+  @@index([status])
+}
+
+enum EventStatus {
+  DRAFT
+  PUBLISHED
+  CANCELLED
+  COMPLETED
+}
+
+model Registration {
+  id           String   @id @default(uuid())
+  studentId    String
+  eventId      String
+  registeredAt DateTime @default(now())
+  cancelledAt  DateTime?
+
+  student User  @relation(fields: [studentId], references: [id])
+  event   Event @relation(fields: [eventId], references: [id])
+
+  @@unique([studentId, eventId])
+  @@index([eventId])
+}
+
+model Attendance {
+  id          String   @id @default(uuid())
+  studentId   String
+  eventId     String
+  checkedInAt DateTime @default(now())
+
+  student User  @relation(fields: [studentId], references: [id])
+  event   Event @relation(fields: [eventId], references: [id])
+
+  @@unique([studentId, eventId])
+  @@index([eventId])
+}
