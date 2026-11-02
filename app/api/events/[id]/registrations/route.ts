@@ -1,6 +1,16 @@
+/**
+ * GET /api/events/:id/registrations - the organizer's attendee list.
+ *
+ * App-layer controller: it composes EVENTS (ownership check),
+ * REGISTRATIONS (who registered) and AUTH (names/emails) through their
+ * public interfaces. It never queries another module's tables.
+ */
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase/client";
 import { getCurrentUser } from "@/lib/jwt/auth";
+import { errorResponse, notLoggedIn } from "@/lib/errors/http";
+import { getUsersByIds } from "@/modules/auth";
+import { getEventSummary } from "@/modules/events";
+import { listActiveRegistrationsForEvent } from "@/modules/registrations";
 
 type RouteContext = {
     params: Promise<{
@@ -8,131 +18,46 @@ type RouteContext = {
     }>;
 };
 
-export async function GET(
-    request: Request,
-    context: RouteContext
-) {
+export async function GET(_request: Request, context: RouteContext) {
     try {
         const user = await getCurrentUser();
-
-        if (!user) {
-            return NextResponse.json(
-                { error: "You must be logged in." },
-                { status: 401 }
-            );
-        }
+        if (!user) return notLoggedIn();
 
         const { id: eventId } = await context.params;
 
-        if (!eventId) {
-            return NextResponse.json(
-                { error: "Event ID is required." },
-                { status: 400 }
-            );
-        }
+        const event = await getEventSummary(eventId);
 
-        // Find the event
-        const { data: event, error: eventError } = await supabase
-            .from("Event")
-            .select("id, title, organizerId, capacity")
-            .eq("id", eventId)
-            .single();
-
-        if (eventError || !event) {
+        if (!event) {
             return NextResponse.json(
                 { error: "Event not found." },
                 { status: 404 }
             );
         }
 
-        // Only the event creator can see registrations
+        // Organizers can only manage their own events.
         if (event.organizerId !== user.userId) {
             return NextResponse.json(
                 {
-                    error:
-                        "You can only view registrations for your own events.",
+                    error: "You can only view registrations for your own events.",
                 },
                 { status: 403 }
             );
         }
 
-        // Get registered users
-        const { data: registrations, error: registrationError } =
-            await supabase
-                .from("Registration")
-                .select(
-                    `
-          id,
-          status,
-          registeredAt,
-          cancelledAt,
-          studentId
-        `
-                )
-                .eq("eventId", eventId)
-                .eq("status", "REGISTERED")
-                .order("registeredAt", { ascending: true });
-
-        if (registrationError) {
-            console.error(
-                "Get registrations error:",
-                registrationError
-            );
-
-            return NextResponse.json(
-                { error: "Could not load registrations." },
-                { status: 500 }
-            );
-        }
-
-        // Get user details
-        const studentIds = (registrations || []).map(
-            (registration) => registration.studentId
+        const registrations = await listActiveRegistrationsForEvent(
+            eventId
         );
 
-        let students: {
-            id: string;
-            name: string;
-            email: string;
-        }[] = [];
-
-        if (studentIds.length > 0) {
-            const { data: users, error: usersError } =
-                await supabase
-                    .from("User")
-                    .select("id, name, email")
-                    .in("id", studentIds);
-
-            if (usersError) {
-                console.error(
-                    "Get registered users error:",
-                    usersError
-                );
-
-                return NextResponse.json(
-                    { error: "Could not load registered users." },
-                    { status: 500 }
-                );
-            }
-
-            students = users || [];
-        }
-
-        const studentsById = new Map(
-            students.map((student) => [
-                student.id,
-                student,
-            ])
+        const students = await getUsersByIds(
+            registrations.map((r) => r.studentId)
         );
+        const studentsById = new Map(students.map((s) => [s.id, s]));
 
-        const result = (registrations || []).map(
-            (registration) => ({
-                id: registration.id,
-                registeredAt: registration.registeredAt,
-                student:
-                    studentsById.get(registration.studentId) || null,
-            })
-        );
+        const result = registrations.map((registration) => ({
+            id: registration.id,
+            registeredAt: registration.registeredAt,
+            student: studentsById.get(registration.studentId) ?? null,
+        }));
 
         return NextResponse.json({
             event: {
@@ -144,11 +69,6 @@ export async function GET(
             registrations: result,
         });
     } catch (error) {
-        console.error("Get event registrations error:", error);
-
-        return NextResponse.json(
-            { error: "Something went wrong." },
-            { status: 500 }
-        );
+        return errorResponse(error, "Could not load registrations.");
     }
 }
