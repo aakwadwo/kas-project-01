@@ -1,12 +1,15 @@
-
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
+import AuthShell, { PasswordToggle } from "@/components/AuthShell";
+import { Notice } from "@/components/ui";
+import { ArrowRightIcon, SpinnerIcon } from "@/components/icons";
 
 export default function LoginPage() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
+    const [showPassword, setShowPassword] = useState(false);
 
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
@@ -45,179 +48,97 @@ export default function LoginPage() {
     }
 
     return (
-        <main className="min-h-screen bg-gray-50">
-            <div className="mx-auto grid min-h-screen max-w-7xl lg:grid-cols-2">
+        <AuthShell
+            poster={{
+                kicker: "Welcome back",
+                headline: (
+                    <>
+                        See what&apos;s on <span className="text-sun">tonight.</span>
+                    </>
+                ),
+                body: "Your tickets, your events and everything new on the board since you last looked.",
+            }}
+        >
+            <p className="eyebrow">Sign in</p>
+            <h2 className="display mt-3 text-5xl">Hey again.</h2>
+            <p className="mt-3 text-base leading-7 text-ink-soft">
+                Use the email you signed up with.
+            </p>
 
-                {/* Brand section */}
-                <section className="hidden flex-col justify-between bg-gray-950 p-12 text-white lg:flex xl:p-16">
-                    <div>
-                        <Link
-                            href="/"
-                            className="inline-flex items-center gap-3"
-                        >
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sm font-bold text-gray-950">
-                                CE
-                            </div>
+            <form onSubmit={handleLogin} className="mt-9 space-y-5">
+                <div>
+                    <label htmlFor="email" className="field-label">
+                        Email
+                    </label>
+                    <input
+                        id="email"
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="you@university.edu"
+                        autoComplete="email"
+                        inputMode="email"
+                        required
+                        aria-invalid={error ? true : undefined}
+                        className="field"
+                    />
+                </div>
 
-                            <div>
-                                <div className="text-base font-bold">
-                                    Campus Event
-                                </div>
-
-                                <div className="text-xs text-gray-400">
-                                    Platform
-                                </div>
-                            </div>
-                        </Link>
+                <div>
+                    <label htmlFor="password" className="field-label">
+                        Password
+                    </label>
+                    <div className="relative">
+                        <input
+                            id="password"
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(event) => setPassword(event.target.value)}
+                            placeholder="Your password"
+                            autoComplete="current-password"
+                            required
+                            aria-invalid={error ? true : undefined}
+                            className="field pr-14"
+                        />
+                        <PasswordToggle
+                            shown={showPassword}
+                            onToggle={() => setShowPassword((s) => !s)}
+                            controls="password"
+                        />
                     </div>
+                </div>
 
-                    <div className="max-w-lg">
-                        <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
-                            Campus events, simplified
-                        </p>
+                {error && <Notice tone="error">{error}</Notice>}
 
-                        <h1 className="text-5xl font-bold leading-tight tracking-tight xl:text-6xl">
-                            Discover what&apos;s happening on campus.
-                        </h1>
+                <button
+                    type="submit"
+                    disabled={loading}
+                    className="btn btn-primary btn-lg w-full"
+                >
+                    {loading ? (
+                        <>
+                            <SpinnerIcon size={18} />
+                            Signing in…
+                        </>
+                    ) : (
+                        <>
+                            Sign in
+                            <ArrowRightIcon size={18} strokeWidth={2.5} />
+                        </>
+                    )}
+                </button>
+            </form>
 
-                        <p className="mt-6 max-w-md text-lg leading-8 text-gray-400">
-                            Find events, connect with your campus community,
-                            and create experiences that bring people together.
-                        </p>
-                    </div>
-
-                    <p className="text-sm text-gray-500">
-                        Campus Event Platform
-                    </p>
-                </section>
-
-                {/* Login section */}
-                <section className="flex items-center justify-center px-6 py-12 sm:px-10 lg:px-16">
-                    <div className="w-full max-w-md">
-
-                        {/* Mobile brand */}
-                        <div className="mb-10 flex items-center gap-3 lg:hidden">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-950 text-sm font-bold text-white">
-                                CE
-                            </div>
-
-                            <div>
-                                <div className="text-base font-bold text-gray-950">
-                                    Campus Event
-                                </div>
-
-                                <div className="text-xs text-gray-500">
-                                    Platform
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="mb-8">
-                            <p className="mb-2 text-sm font-semibold text-gray-500">
-                                Welcome back
-                            </p>
-
-                            <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-                                Sign in to your account
-                            </h2>
-
-                            <p className="mt-3 text-sm leading-6 text-gray-600">
-                                Access your events, registrations, and campus
-                                activities.
-                            </p>
-                        </div>
-
-                        <form
-                            onSubmit={handleLogin}
-                            className="space-y-5"
-                        >
-                            <div>
-                                <label
-                                    htmlFor="email"
-                                    className="mb-2 block text-sm font-semibold text-gray-800"
-                                >
-                                    Email address
-                                </label>
-
-                                <input
-                                    id="email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(event) =>
-                                        setEmail(event.target.value)
-                                    }
-                                    placeholder="you@example.com"
-                                    autoComplete="email"
-                                    required
-                                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10"
-                                />
-                            </div>
-
-                            <div>
-                                <label
-                                    htmlFor="password"
-                                    className="mb-2 block text-sm font-semibold text-gray-800"
-                                >
-                                    Password
-                                </label>
-
-                                <input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(event) =>
-                                        setPassword(event.target.value)
-                                    }
-                                    placeholder="Enter your password"
-                                    autoComplete="current-password"
-                                    required
-                                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10"
-                                />
-                            </div>
-
-                            {error && (
-                                <div
-                                    role="alert"
-                                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700"
-                                >
-                                    {error}
-                                </div>
-                            )}
-
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-950/15 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {loading ? "Signing in..." : "Sign in"}
-                            </button>
-                        </form>
-
-                        <div className="my-8 flex items-center gap-4">
-                            <div className="h-px flex-1 bg-gray-200" />
-
-                            <span className="text-xs font-medium text-gray-400">
-                                NEW TO THE PLATFORM?
-                            </span>
-
-                            <div className="h-px flex-1 bg-gray-200" />
-                        </div>
-
-                        <Link
-                            href="/register"
-                            className="block w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-center text-sm font-semibold text-gray-800 transition hover:border-gray-400 hover:bg-gray-50"
-                        >
-                            Create an account
-                        </Link>
-
-                        <p className="mt-8 text-center text-xs leading-5 text-gray-500">
-                            By continuing, you agree to use the platform
-                            responsibly and respect your campus community.
-                        </p>
-                    </div>
-                </section>
+            <div className="mt-10 rounded-2xl border-2 border-dashed border-ink/40 p-5 text-center">
+                <p className="text-sm text-ink-soft">New around here?</p>
+                <Link
+                    href="/register"
+                    className="mt-1 inline-flex min-h-11 items-center gap-1.5 font-display text-lg font-extrabold underline decoration-signal decoration-[3px] underline-offset-4 hover:decoration-ink"
+                >
+                    Make an account
+                    <ArrowRightIcon size={16} strokeWidth={2.5} />
+                </Link>
             </div>
-        </main>
+        </AuthShell>
     );
 }
-

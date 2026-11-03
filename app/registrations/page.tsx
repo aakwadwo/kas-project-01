@@ -1,8 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
+import {
+    DateStub,
+    EmptyState,
+    Notice,
+    PageHeader,
+    Tag,
+    useConfirm,
+} from "@/components/ui";
+import {
+    ArrowRightIcon,
+    CheckIcon,
+    ClockIcon,
+    PinIcon,
+    SpinnerIcon,
+    TicketIcon,
+} from "@/components/icons";
+import { formatTimeRange, relativeDay } from "@/lib/ui/format";
 
 type EventSummary = {
     id: string;
@@ -23,53 +40,37 @@ type MyRegistration = {
     event: EventSummary | null;
 };
 
-function formatDateTime(value: string) {
-    return new Date(value).toLocaleString(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    });
-}
-
 function getBadge(registration: MyRegistration, now: number) {
     const started =
         registration.event &&
         new Date(registration.event.startTime).getTime() <= now;
 
     if (registration.status === "CANCELLED") {
-        return {
-            label: "Registration cancelled",
-            classes: "border-gray-200 bg-gray-100 text-gray-600",
-        };
+        return { label: "You cancelled", tone: "mute" as const };
     }
 
     if (registration.event?.status === "CANCELLED") {
-        return {
-            label: "Event cancelled",
-            classes: "border-red-200 bg-red-50 text-red-700",
-        };
+        return { label: "Event cancelled", tone: "signal" as const };
     }
 
     if (registration.attended) {
-        return {
-            label: "✓ Attended",
-            classes: "border-emerald-200 bg-emerald-50 text-emerald-700",
-        };
+        return { label: "Attended", tone: "moss" as const, check: true };
     }
 
     if (started) {
-        return {
-            label: "Not checked in",
-            classes: "border-amber-200 bg-amber-50 text-amber-700",
-        };
+        return { label: "Not checked in", tone: "sun" as const };
     }
 
-    return {
-        label: "Registered",
-        classes: "border-blue-200 bg-blue-50 text-blue-700",
-    };
+    return { label: "Going", tone: "sky" as const };
+}
+
+function isUpcoming(r: MyRegistration, now: number) {
+    return (
+        r.status === "REGISTERED" &&
+        r.event !== null &&
+        r.event.status !== "CANCELLED" &&
+        new Date(r.event.endTime).getTime() > now
+    );
 }
 
 export default function MyRegistrationsPage() {
@@ -78,6 +79,8 @@ export default function MyRegistrationsPage() {
     const [error, setError] = useState("");
     const [cancellingId, setCancellingId] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
+
+    const { confirm, dialog } = useConfirm();
 
     async function load() {
         try {
@@ -114,7 +117,15 @@ export default function MyRegistrationsPage() {
     }, []);
 
     async function cancel(registration: MyRegistration) {
-        if (!window.confirm("Cancel your registration for this event?")) {
+        const ok = await confirm({
+            title: "Give up your spot?",
+            body: `You'll lose your place at "${registration.event?.title ?? "this event"}". You can register again while spots remain.`,
+            confirmLabel: "Cancel registration",
+            cancelLabel: "Keep my spot",
+            destructive: true,
+        });
+
+        if (!ok) {
             return;
         }
 
@@ -141,119 +152,188 @@ export default function MyRegistrationsPage() {
         }
     }
 
+    const { upcoming, past } = useMemo(() => {
+        const byStart = (a: MyRegistration, b: MyRegistration) =>
+            new Date(a.event?.startTime ?? 0).getTime() -
+            new Date(b.event?.startTime ?? 0).getTime();
+        const up = registrations.filter((r) => isUpcoming(r, now)).sort(byStart);
+        const rest = registrations
+            .filter((r) => !isUpcoming(r, now))
+            .sort((a, b) => byStart(b, a));
+        return { upcoming: up, past: rest };
+    }, [registrations, now]);
+
+    function renderRow(registration: MyRegistration, dim: boolean) {
+        const badge = getBadge(registration, now);
+        const event = registration.event;
+        const canCancel =
+            registration.status === "REGISTERED" &&
+            event?.status === "PUBLISHED" &&
+            new Date(event.startTime).getTime() > now;
+
+        return (
+            <li
+                key={registration.id}
+                className={`ticket ticket-hover flex ${dim ? "opacity-75 !shadow-[var(--shadow-hard-sm)]" : ""}`}
+            >
+                <div className="flex w-[5.5rem] shrink-0 items-center justify-center border-r-2 border-dashed border-ink bg-paper/60 py-4 sm:w-28">
+                    {event ? (
+                        <DateStub value={event.startTime} muted={dim} />
+                    ) : (
+                        <TicketIcon size={28} className="text-ink-mute" />
+                    )}
+                </div>
+
+                <div className="flex min-w-0 flex-1 flex-col gap-4 p-5 sm:flex-row sm:items-center">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Tag tone={badge.tone}>
+                                {badge.check && <CheckIcon size={12} strokeWidth={3} />}
+                                {badge.label}
+                            </Tag>
+                            {event && !dim && (
+                                <span className="font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-mute">
+                                    {relativeDay(event.startTime, now)}
+                                </span>
+                            )}
+                        </div>
+
+                        <Link
+                            href={`/events/${registration.eventId}`}
+                            className={`mt-2 block font-display text-xl font-extrabold leading-tight tracking-tight hover:underline hover:decoration-signal hover:decoration-[3px] hover:underline-offset-4 ${
+                                event?.status === "CANCELLED" ? "line-through decoration-signal" : ""
+                            }`}
+                        >
+                            {event?.title ?? "Event no longer available"}
+                        </Link>
+
+                        {event && (
+                            <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-soft">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <ClockIcon size={14} />
+                                    {formatTimeRange(event.startTime, event.endTime)}
+                                </span>
+                                <span className="inline-flex min-w-0 items-center gap-1.5">
+                                    <PinIcon size={14} className="shrink-0" />
+                                    <span className="truncate">{event.location}</span>
+                                </span>
+                            </p>
+                        )}
+                    </div>
+
+                    {canCancel && (
+                        <button
+                            type="button"
+                            onClick={() => cancel(registration)}
+                            disabled={cancellingId === registration.id}
+                            className="btn btn-ghost btn-sm shrink-0 self-start text-signal-deep sm:self-center"
+                        >
+                            {cancellingId === registration.id ? (
+                                <>
+                                    <SpinnerIcon size={15} />
+                                    Cancelling…
+                                </>
+                            ) : (
+                                "Can't make it"
+                            )}
+                        </button>
+                    )}
+                </div>
+            </li>
+        );
+    }
+
     return (
         <>
             <Navbar />
 
-            <main className="min-h-screen bg-gray-50 px-5 py-10 sm:px-8 md:py-14">
+            <main className="flex-1 px-4 py-10 sm:px-8 md:py-14">
                 <div className="mx-auto max-w-4xl">
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-                        Student
-                    </p>
-                    <h1 className="mt-2 text-3xl font-bold tracking-tight text-gray-950">
-                        My Registrations
-                    </h1>
-                    <p className="mt-2 text-sm text-gray-500">
-                        Events you have registered for, and whether you were
-                        checked in.
-                    </p>
+                    <PageHeader
+                        eyebrow="Your wallet"
+                        title={
+                            <>
+                                My <span className="mark">tickets</span>
+                            </>
+                        }
+                        description="Everything you've signed up for, and whether you were checked in."
+                    />
 
                     {error && (
-                        <div
-                            role="alert"
-                            className="mt-6 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"
-                        >
-                            {error}
+                        <div className="mb-8">
+                            <Notice tone="error">{error}</Notice>
                         </div>
                     )}
 
                     {loading ? (
-                        <p className="mt-10 text-sm text-gray-500">
-                            Loading...
-                        </p>
-                    ) : registrations.length === 0 ? (
-                        <div className="mt-10 rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center">
-                            <h2 className="font-bold text-gray-950">
-                                No registrations yet
-                            </h2>
-                            <p className="mt-2 text-sm text-gray-500">
-                                Find an event and register to see it here.
-                            </p>
-                            <Link
-                                href="/events"
-                                className="mt-5 inline-block rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-                            >
-                                Browse Events
-                            </Link>
+                        <div className="space-y-5" aria-busy="true" aria-label="Loading tickets">
+                            {Array.from({ length: 3 }).map((_, i) => (
+                                <div key={i} className="skeleton h-32 rounded-2xl" />
+                            ))}
                         </div>
+                    ) : registrations.length === 0 ? (
+                        <EmptyState
+                            icon={<TicketIcon size={28} />}
+                            eyebrow="Empty wallet"
+                            title="No tickets yet"
+                            action={
+                                <Link href="/events" className="btn btn-signal btn-lg">
+                                    Browse what&apos;s on
+                                    <ArrowRightIcon size={18} strokeWidth={2.5} />
+                                </Link>
+                            }
+                        >
+                            Find something that looks fun and save a spot.
+                            It&apos;ll show up right here.
+                        </EmptyState>
                     ) : (
-                        <ul className="mt-8 space-y-4">
-                            {registrations.map((registration) => {
-                                const badge = getBadge(registration, now);
-                                const event = registration.event;
-                                const canCancel =
-                                    registration.status === "REGISTERED" &&
-                                    event?.status === "PUBLISHED" &&
-                                    new Date(event.startTime).getTime() >
-                                        now;
+                        <div className="space-y-14">
+                            <section aria-labelledby="upcoming-heading">
+                                <h2
+                                    id="upcoming-heading"
+                                    className="mb-5 flex items-baseline gap-3 font-display text-2xl font-extrabold tracking-tight"
+                                >
+                                    Coming up
+                                    <span className="font-mono text-sm font-semibold text-ink-mute">
+                                        {upcoming.length}
+                                    </span>
+                                </h2>
+                                {upcoming.length === 0 ? (
+                                    <p className="rounded-2xl border-2 border-dashed border-ink/40 p-6 text-sm text-ink-soft">
+                                        Nothing coming up.{" "}
+                                        <Link href="/events" className="font-bold text-ink underline decoration-signal decoration-2 underline-offset-4">
+                                            See what&apos;s on
+                                        </Link>
+                                    </p>
+                                ) : (
+                                    <ul className="stagger space-y-5">
+                                        {upcoming.map((r) => renderRow(r, false))}
+                                    </ul>
+                                )}
+                            </section>
 
-                                return (
-                                    <li
-                                        key={registration.id}
-                                        className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm"
+                            {past.length > 0 && (
+                                <section aria-labelledby="past-heading">
+                                    <h2
+                                        id="past-heading"
+                                        className="mb-5 flex items-baseline gap-3 font-display text-2xl font-extrabold tracking-tight text-ink-soft"
                                     >
-                                        <div className="flex flex-wrap items-start justify-between gap-3">
-                                            <div className="min-w-0">
-                                                <Link
-                                                    href={`/events/${registration.eventId}`}
-                                                    className="text-lg font-bold text-gray-950 hover:underline"
-                                                >
-                                                    {event?.title ??
-                                                        "Event no longer available"}
-                                                </Link>
-
-                                                {event && (
-                                                    <p className="mt-1 text-sm text-gray-500">
-                                                        {formatDateTime(
-                                                            event.startTime
-                                                        )}{" "}
-                                                        · {event.location}
-                                                    </p>
-                                                )}
-                                            </div>
-
-                                            <span
-                                                className={`rounded-full border px-3 py-1 text-xs font-bold ${badge.classes}`}
-                                            >
-                                                {badge.label}
-                                            </span>
-                                        </div>
-
-                                        {canCancel && (
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    cancel(registration)
-                                                }
-                                                disabled={
-                                                    cancellingId ===
-                                                    registration.id
-                                                }
-                                                className="mt-4 rounded-xl border border-red-200 px-4 py-2 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:opacity-50"
-                                            >
-                                                {cancellingId ===
-                                                registration.id
-                                                    ? "Cancelling..."
-                                                    : "Cancel registration"}
-                                            </button>
-                                        )}
-                                    </li>
-                                );
-                            })}
-                        </ul>
+                                        Past & cancelled
+                                        <span className="font-mono text-sm font-semibold text-ink-mute">
+                                            {past.length}
+                                        </span>
+                                    </h2>
+                                    <ul className="space-y-4">
+                                        {past.map((r) => renderRow(r, true))}
+                                    </ul>
+                                </section>
+                            )}
+                        </div>
                     )}
                 </div>
             </main>
+
+            {dialog}
         </>
     );
 }
