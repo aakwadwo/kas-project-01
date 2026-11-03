@@ -59,6 +59,7 @@ model Registration {
   id           String   @id @default(uuid())
   studentId    String
   eventId      String
+  status       RegistrationStatus @default(REGISTERED)
   registeredAt DateTime @default(now())
   cancelledAt  DateTime?
 
@@ -67,6 +68,11 @@ model Registration {
 
   @@unique([studentId, eventId])
   @@index([eventId])
+}
+
+enum RegistrationStatus {
+  REGISTERED
+  CANCELLED
 }
 
 model Attendance {

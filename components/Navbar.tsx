@@ -97,6 +97,13 @@ export default function Navbar() {
                     </Link>
 
                     <Link
+                        href="/registrations"
+                        className="rounded-lg px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-100 hover:text-gray-950"
+                    >
+                        My Registrations
+                    </Link>
+
+                    <Link
                         href="/events/create"
                         className="ml-2 rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
                     >
