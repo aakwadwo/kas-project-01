@@ -4,12 +4,33 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import Navbar from "@/components/Navbar";
-
-type EventStatus =
-    | "DRAFT"
-    | "PUBLISHED"
-    | "CANCELLED"
-    | "COMPLETED";
+import {
+    BackLink,
+    DateStub,
+    Notice,
+    StatusStamp,
+    Tag,
+    useConfirm,
+} from "@/components/ui";
+import {
+    AlertIcon,
+    ArrowRightIcon,
+    CalendarIcon,
+    CheckIcon,
+    ClockIcon,
+    InfoIcon,
+    PinIcon,
+    SpinnerIcon,
+    TicketIcon,
+    UsersIcon,
+} from "@/components/icons";
+import {
+    formatLongDate,
+    formatTimeRange,
+    plural,
+    relativeDay,
+    type EventStatus,
+} from "@/lib/ui/format";
 
 type Event = {
     id: string;
@@ -37,16 +58,17 @@ export default function EventDetailsPage() {
     const eventId = params.id as string;
 
     const [event, setEvent] = useState<Event | null>(null);
-    const [registration, setRegistration] =
-        useState<Registration | null>(null);
+    const [registration, setRegistration] = useState<Registration | null>(null);
 
-    const [currentUserId, setCurrentUserId] =
-        useState<string | null>(null);
+    const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
     const [loading, setLoading] = useState(true);
     const [registering, setRegistering] = useState(false);
     const [error, setError] = useState("");
     const [eventExpired, setEventExpired] = useState(false);
+    const [justRegistered, setJustRegistered] = useState(false);
+
+    const { confirm, dialog } = useConfirm();
 
     async function loadEvent() {
         try {
@@ -72,12 +94,9 @@ export default function EventDetailsPage() {
 
             setCurrentUserId(userData.user.id);
 
-            const eventResponse = await fetch(
-                `/api/events/${eventId}`,
-                {
-                    cache: "no-store",
-                }
-            );
+            const eventResponse = await fetch(`/api/events/${eventId}`, {
+                cache: "no-store",
+            });
 
             const eventData = await eventResponse.json();
 
@@ -92,9 +111,7 @@ export default function EventDetailsPage() {
             }
 
             if (!eventResponse.ok) {
-                setError(
-                    eventData.error || "Could not load event."
-                );
+                setError(eventData.error || "Could not load event.");
                 return;
             }
 
@@ -112,13 +129,10 @@ export default function EventDetailsPage() {
                 return;
             }
 
-            const registrationData =
-                await registrationResponse.json();
+            const registrationData = await registrationResponse.json();
 
             if (registrationResponse.ok) {
-                setRegistration(
-                    registrationData.registration || null
-                );
+                setRegistration(registrationData.registration || null);
             }
         } catch {
             setError("Could not connect to the server.");
@@ -143,10 +157,7 @@ export default function EventDetailsPage() {
         window.addEventListener("pageshow", handlePageShow);
 
         return () => {
-            window.removeEventListener(
-                "pageshow",
-                handlePageShow
-            );
+            window.removeEventListener("pageshow", handlePageShow);
         };
     }, [eventId]);
 
@@ -155,13 +166,10 @@ export default function EventDetailsPage() {
             setRegistering(true);
             setError("");
 
-            const response = await fetch(
-                `/api/registrations/${eventId}`,
-                {
-                    method: "POST",
-                    cache: "no-store",
-                }
-            );
+            const response = await fetch(`/api/registrations/${eventId}`, {
+                method: "POST",
+                cache: "no-store",
+            });
 
             const data = await response.json();
 
@@ -171,14 +179,12 @@ export default function EventDetailsPage() {
             }
 
             if (!response.ok) {
-                setError(
-                    data.error ||
-                    "Could not register for event."
-                );
+                setError(data.error || "Could not register for event.");
                 return;
             }
 
             setRegistration(data.registration);
+            setJustRegistered(true);
         } catch {
             setError("Could not connect to the server.");
         } finally {
@@ -187,9 +193,13 @@ export default function EventDetailsPage() {
     }
 
     async function handleCancelRegistration() {
-        const confirmed = window.confirm(
-            "Are you sure you want to cancel your registration?"
-        );
+        const confirmed = await confirm({
+            title: "Give up your spot?",
+            body: "Your place will be released for someone else. You can register again while spots remain.",
+            confirmLabel: "Cancel registration",
+            cancelLabel: "Keep my spot",
+            destructive: true,
+        });
 
         if (!confirmed) {
             return;
@@ -198,14 +208,12 @@ export default function EventDetailsPage() {
         try {
             setRegistering(true);
             setError("");
+            setJustRegistered(false);
 
-            const response = await fetch(
-                `/api/registrations/${eventId}`,
-                {
-                    method: "DELETE",
-                    cache: "no-store",
-                }
-            );
+            const response = await fetch(`/api/registrations/${eventId}`, {
+                method: "DELETE",
+                cache: "no-store",
+            });
 
             const data = await response.json();
 
@@ -215,10 +223,7 @@ export default function EventDetailsPage() {
             }
 
             if (!response.ok) {
-                setError(
-                    data.error ||
-                    "Could not cancel registration."
-                );
+                setError(data.error || "Could not cancel registration.");
                 return;
             }
 
@@ -230,102 +235,21 @@ export default function EventDetailsPage() {
         }
     }
 
-    function formatDate(dateString: string) {
-        return new Date(dateString).toLocaleDateString(
-            undefined,
-            {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-            }
-        );
-    }
-
-    function formatShortDate(dateString: string) {
-        return new Date(dateString).toLocaleDateString(
-            undefined,
-            {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-            }
-        );
-    }
-
-    function formatTime(dateString: string) {
-        return new Date(dateString).toLocaleTimeString(
-            undefined,
-            {
-                hour: "numeric",
-                minute: "2-digit",
-            }
-        );
-    }
-
-    function getStatusLabel(status: EventStatus) {
-        switch (status) {
-            case "PUBLISHED":
-                return "Live";
-            case "CANCELLED":
-                return "Cancelled";
-            case "COMPLETED":
-                return "Completed";
-            case "DRAFT":
-            default:
-                return "Draft";
-        }
-    }
-
-    function getStatusClasses(status: EventStatus) {
-        switch (status) {
-            case "PUBLISHED":
-                return "border-emerald-400/30 bg-emerald-400/10 text-emerald-300";
-
-            case "CANCELLED":
-                return "border-red-400/30 bg-red-400/10 text-red-300";
-
-            case "COMPLETED":
-                return "border-white/15 bg-white/10 text-gray-300";
-
-            case "DRAFT":
-            default:
-                return "border-amber-400/30 bg-amber-400/10 text-amber-300";
-        }
-    }
-
     if (loading) {
         return (
             <>
                 <Navbar />
-
-                <main className="min-h-screen bg-[#f5f7fb]">
-                    <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8">
-                        <div className="animate-pulse">
-                            <div className="h-5 w-32 rounded bg-gray-200" />
-
-                            <div className="mt-7 overflow-hidden rounded-3xl bg-gray-200">
-                                <div className="h-72 sm:h-80" />
+                <main className="flex-1 px-4 py-8 sm:px-8" aria-busy="true">
+                    <div className="mx-auto max-w-7xl">
+                        <div className="skeleton h-5 w-36" />
+                        <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_380px]">
+                            <div className="space-y-4">
+                                <div className="skeleton h-6 w-28" />
+                                <div className="skeleton h-16 w-4/5" />
+                                <div className="skeleton h-16 w-3/5" />
+                                <div className="skeleton mt-8 h-40 w-full" />
                             </div>
-
-                            <div className="-mt-10 px-4 sm:px-8">
-                                <div className="rounded-3xl bg-white p-6 shadow-sm sm:p-8">
-                                    <div className="h-10 w-3/4 rounded bg-gray-200" />
-
-                                    <div className="mt-4 h-5 w-1/2 rounded bg-gray-200" />
-
-                                    <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                                        {Array.from({
-                                            length: 3,
-                                        }).map((_, index) => (
-                                            <div
-                                                key={index}
-                                                className="h-24 rounded-2xl bg-gray-100"
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
+                            <div className="skeleton h-96 rounded-2xl" />
                         </div>
                     </div>
                 </main>
@@ -337,45 +261,28 @@ export default function EventDetailsPage() {
         return (
             <>
                 <Navbar />
-
-                <main className="min-h-screen bg-[#f5f7fb] px-5 py-8 sm:px-8">
-                    <div className="mx-auto flex min-h-[75vh] max-w-3xl items-center justify-center">
-                        <div className="w-full overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-xl">
-                            <div className="bg-gray-950 px-6 py-12 text-center sm:px-12 sm:py-16">
-                                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-white/10 text-2xl">
-                                    ⏱
-                                </div>
-
-                                <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-gray-400">
-                                    Event unavailable
-                                </p>
-
-                                <h1 className="mt-3 text-3xl font-bold tracking-tight text-white sm:text-4xl">
-                                    This event has ended
-                                </h1>
-
-                                <p className="mx-auto mt-4 max-w-lg text-sm leading-7 text-gray-400 sm:text-base">
-                                    This event is no longer available because
-                                    more than one hour has passed since it
-                                    started.
-                                </p>
+                <main className="flex flex-1 items-center justify-center px-4 py-12 sm:px-8">
+                    <div className="panel w-full max-w-xl overflow-hidden text-center">
+                        <div className="dot-grid border-b-2 border-ink bg-paper-deep px-6 py-12">
+                            <div className="mx-auto flex h-16 w-16 rotate-6 items-center justify-center rounded-2xl border-2 border-ink bg-card shadow-[var(--shadow-hard-sm)]">
+                                <ClockIcon size={30} />
                             </div>
-
-                            <div className="flex flex-wrap justify-center gap-3 p-6 sm:p-8">
-                                <Link
-                                    href="/events"
-                                    className="rounded-xl bg-gray-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-                                >
-                                    Browse Events
-                                </Link>
-
-                                <Link
-                                    href="/events/my-events"
-                                    className="rounded-xl border border-gray-300 bg-white px-6 py-3 text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
-                                >
-                                    My Events
-                                </Link>
-                            </div>
+                            <p className="eyebrow mt-6">Event over</p>
+                            <h1 className="display mt-2 text-4xl sm:text-5xl">
+                                You just missed it.
+                            </h1>
+                            <p className="mx-auto mt-4 max-w-sm text-base leading-7 text-ink-soft">
+                                This event started more than an hour ago, so
+                                it&apos;s been taken off the board.
+                            </p>
+                        </div>
+                        <div className="flex flex-wrap justify-center gap-3 p-6">
+                            <Link href="/events" className="btn btn-primary">
+                                See what&apos;s on now
+                            </Link>
+                            <Link href="/events/my-events" className="btn btn-outline">
+                                Hosting
+                            </Link>
                         </div>
                     </div>
                 </main>
@@ -387,40 +294,26 @@ export default function EventDetailsPage() {
         return (
             <>
                 <Navbar />
-
-                <main className="min-h-screen bg-[#f5f7fb] px-5 py-8 sm:px-8">
-                    <div className="mx-auto max-w-5xl">
-                        <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-xl">
-                            <div className="bg-gray-950 px-6 py-10 sm:px-10">
-                                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-500/10 text-lg font-bold text-red-400">
-                                    !
-                                </div>
-
-                                <h1 className="mt-5 text-2xl font-bold text-white">
-                                    Unable to load event
-                                </h1>
-
-                                <p className="mt-2 text-sm leading-6 text-gray-400">
-                                    {error}
-                                </p>
-                            </div>
-
-                            <div className="flex flex-wrap gap-3 p-6 sm:p-8">
-                                <button
-                                    type="button"
-                                    onClick={loadEvent}
-                                    className="rounded-xl bg-gray-950 px-5 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-                                >
-                                    Try again
-                                </button>
-
-                                <Link
-                                    href="/events"
-                                    className="rounded-xl border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
-                                >
-                                    Back to Events
-                                </Link>
-                            </div>
+                <main className="flex-1 px-4 py-10 sm:px-8">
+                    <div className="mx-auto max-w-2xl">
+                        <BackLink href="/events">All events</BackLink>
+                        <div className="mt-6">
+                            <Notice
+                                tone="error"
+                                title="Couldn't load this event"
+                                action={
+                                    <div className="flex flex-wrap gap-2">
+                                        <button type="button" onClick={loadEvent} className="btn btn-primary btn-sm">
+                                            Try again
+                                        </button>
+                                        <Link href="/events" className="btn btn-outline btn-sm">
+                                            Back to the board
+                                        </Link>
+                                    </div>
+                                }
+                            >
+                                {error}
+                            </Notice>
                         </div>
                     </div>
                 </main>
@@ -432,452 +325,248 @@ export default function EventDetailsPage() {
         return null;
     }
 
-    const isOwner =
-        currentUserId === event.organizerId;
-
-    const isRegistered =
-        registration?.status === "REGISTERED";
-
-    const eventHasStarted =
-        new Date(event.startTime).getTime() <=
-        Date.now();
-
+    const isOwner = currentUserId === event.organizerId;
+    const isRegistered = registration?.status === "REGISTERED";
+    const eventHasStarted = new Date(event.startTime).getTime() <= Date.now();
     const canRegister =
-        !isOwner &&
-        event.status === "PUBLISHED" &&
-        !eventHasStarted;
+        !isOwner && event.status === "PUBLISHED" && !eventHasStarted;
+    const registrationOpen = event.status === "PUBLISHED" && !eventHasStarted;
 
     return (
         <>
             <Navbar />
 
-            <main className="min-h-screen bg-[#f5f7fb]">
-                <div className="mx-auto max-w-7xl px-5 py-6 sm:px-8 lg:px-10">
-                    {/* Top navigation */}
-                    <div className="flex items-center justify-between">
-                        <Link
-                            href="/events"
-                            className="group inline-flex items-center gap-2 text-sm font-semibold text-gray-500 transition hover:text-gray-950"
-                        >
-                            <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-base shadow-sm transition group-hover:-translate-x-0.5">
-                                ←
-                            </span>
+            <main className="flex-1 px-4 pb-20 pt-6 sm:px-8">
+                <div className="mx-auto max-w-7xl">
+                    <BackLink href="/events">All events</BackLink>
 
-                            Back to Events
-                        </Link>
-
-                        <span className="hidden text-xs font-semibold uppercase tracking-[0.18em] text-gray-400 sm:block">
-                            Campus Events
-                        </span>
-                    </div>
-
-                    {/* Hero */}
-                    <section className="relative mt-6 overflow-hidden rounded-[2rem] bg-gray-950 shadow-2xl">
-                        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(59,130,246,0.28),transparent_32%),radial-gradient(circle_at_15%_90%,rgba(16,185,129,0.14),transparent_28%)]" />
-
-                        <div className="relative px-6 py-10 sm:px-10 sm:py-14 lg:px-14 lg:py-16">
+                    <div className="mt-6 grid gap-10 lg:grid-cols-[1fr_380px] lg:gap-14">
+                        {/* Left column */}
+                        <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                                <span
-                                    className={`rounded-full border px-3 py-1.5 text-xs font-bold ${getStatusClasses(
-                                        event.status
-                                    )}`}
-                                >
-                                    {getStatusLabel(event.status)}
-                                </span>
-
-                                {isOwner && (
-                                    <span className="rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-1.5 text-xs font-bold text-blue-300">
-                                        Your Event
-                                    </span>
-                                )}
-
+                                <StatusStamp status={event.status} />
+                                {isOwner && <Tag tone="sky">You&apos;re hosting</Tag>}
                                 {isRegistered && !isOwner && (
-                                    <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
-                                        ✓ Registered
-                                    </span>
+                                    <Tag tone="moss">
+                                        <CheckIcon size={12} strokeWidth={3} />
+                                        Going
+                                    </Tag>
+                                )}
+                                {!eventHasStarted && event.status === "PUBLISHED" && (
+                                    <Tag tone="mute">{relativeDay(event.startTime)}</Tag>
                                 )}
                             </div>
 
-                            <div className="mt-7 max-w-4xl">
-                                <h1 className="text-4xl font-bold leading-[1.05] tracking-tight text-white sm:text-5xl lg:text-6xl">
-                                    {event.title}
-                                </h1>
+                            <h1
+                                className={`display mt-5 break-words text-5xl sm:text-6xl lg:text-7xl ${
+                                    event.status === "CANCELLED"
+                                        ? "line-through decoration-signal decoration-[6px]"
+                                        : ""
+                                }`}
+                            >
+                                {event.title}
+                            </h1>
 
-                                <p className="mt-5 max-w-2xl text-base leading-7 text-gray-400 sm:text-lg">
-                                    Discover the details, secure your place,
-                                    and get ready to be part of this campus
-                                    event.
-                                </p>
-                            </div>
-
-                            <div className="mt-9 flex flex-wrap gap-3 text-sm text-gray-300">
-                                <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-sm">
-                                    <span>📅</span>
-                                    {formatShortDate(event.startTime)}
-                                </div>
-
-                                <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-sm">
-                                    <span>🕐</span>
-                                    {formatTime(event.startTime)}
-                                </div>
-
-                                <div className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-sm">
-                                    <span>📍</span>
-                                    <span className="max-w-[220px] truncate">
-                                        {event.location}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Main content */}
-                    <div className="relative -mt-8 grid gap-6 px-2 sm:px-5 lg:grid-cols-[1fr_360px] lg:px-8">
-                        {/* Left content */}
-                        <div className="space-y-6">
-                            {/* Event details */}
-                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-lg shadow-gray-200/50 sm:p-8">
-                                <div>
-                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
-                                        Event information
-                                    </p>
-
-                                    <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-950">
-                                        Everything you need to know
-                                    </h2>
-                                </div>
-
-                                <div className="mt-7 grid gap-4 sm:grid-cols-2">
-                                    <div className="group rounded-2xl border border-gray-200 bg-gray-50 p-5 transition hover:border-blue-200 hover:bg-blue-50/40">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-lg">
-                                                📅
-                                            </div>
-
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                    Date
-                                                </p>
-
-                                                <p className="mt-2 text-sm font-bold leading-6 text-gray-950">
-                                                    {formatDate(
-                                                        event.startTime
-                                                    )}
-                                                </p>
-                                            </div>
+                            {/* Fact strip */}
+                            <dl className="mt-10 grid overflow-hidden rounded-2xl border-2 border-ink bg-card sm:grid-cols-2">
+                                {[
+                                    {
+                                        Icon: CalendarIcon,
+                                        label: "Date",
+                                        value: formatLongDate(event.startTime),
+                                    },
+                                    {
+                                        Icon: ClockIcon,
+                                        label: "Time",
+                                        value: formatTimeRange(event.startTime, event.endTime),
+                                    },
+                                    {
+                                        Icon: PinIcon,
+                                        label: "Where",
+                                        value: event.location,
+                                    },
+                                    {
+                                        Icon: UsersIcon,
+                                        label: "Capacity",
+                                        value: plural(event.capacity, "spot"),
+                                    },
+                                ].map(({ Icon, label, value }, i) => (
+                                    <div
+                                        key={label}
+                                        className={`flex gap-4 border-ink p-5 ${
+                                            i > 0 ? "border-t-2" : ""
+                                        } ${i < 2 ? "sm:border-t-0" : ""} ${
+                                            i % 2 === 1 ? "sm:border-l-2" : ""
+                                        }`}
+                                    >
+                                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-paper-deep">
+                                            <Icon size={19} />
+                                        </span>
+                                        <div className="min-w-0">
+                                            <dt className="eyebrow !text-[0.68rem]">{label}</dt>
+                                            <dd className="mt-1 break-words font-semibold leading-6">
+                                                {value}
+                                            </dd>
                                         </div>
                                     </div>
-
-                                    <div className="group rounded-2xl border border-gray-200 bg-gray-50 p-5 transition hover:border-violet-200 hover:bg-violet-50/40">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-100 text-lg">
-                                                🕐
-                                            </div>
-
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                    Time
-                                                </p>
-
-                                                <p className="mt-2 text-sm font-bold leading-6 text-gray-950">
-                                                    {formatTime(
-                                                        event.startTime
-                                                    )}
-                                                    {" – "}
-                                                    {formatTime(
-                                                        event.endTime
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="group rounded-2xl border border-gray-200 bg-gray-50 p-5 transition hover:border-emerald-200 hover:bg-emerald-50/40">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-lg">
-                                                📍
-                                            </div>
-
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                    Location
-                                                </p>
-
-                                                <p className="mt-2 break-words text-sm font-bold leading-6 text-gray-950">
-                                                    {event.location}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="group rounded-2xl border border-gray-200 bg-gray-50 p-5 transition hover:border-orange-200 hover:bg-orange-50/40">
-                                        <div className="flex items-start gap-4">
-                                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-lg">
-                                                👥
-                                            </div>
-
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                    Capacity
-                                                </p>
-
-                                                <p className="mt-2 text-sm font-bold leading-6 text-gray-950">
-                                                    {event.capacity}{" "}
-                                                    {event.capacity === 1
-                                                        ? "person"
-                                                        : "people"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </section>
+                                ))}
+                            </dl>
 
                             {/* Description */}
-                            <section className="rounded-3xl border border-gray-200 bg-white p-6 shadow-lg shadow-gray-200/50 sm:p-8">
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-blue-600">
+                            <section className="mt-12" aria-labelledby="about-heading">
+                                <h2 id="about-heading" className="eyebrow">
                                     About this event
-                                </p>
-
-                                <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-950">
-                                    Event description
                                 </h2>
-
-                                <div className="mt-6 border-l-4 border-blue-500 pl-5">
-                                    <p className="whitespace-pre-wrap text-sm leading-8 text-gray-600 sm:text-base">
-                                        {event.description}
-                                    </p>
-                                </div>
+                                <p className="mt-4 max-w-[68ch] whitespace-pre-wrap text-[1.05rem] leading-8 text-ink first-letter:float-left first-letter:mr-3 first-letter:mt-1 first-letter:font-display first-letter:text-6xl first-letter:font-extrabold first-letter:leading-[0.8] first-letter:text-signal">
+                                    {event.description}
+                                </p>
                             </section>
-
-                            {/* Error */}
-                            {error && (
-                                <div
-                                    role="alert"
-                                    className="rounded-2xl border border-red-200 bg-red-50 p-5 text-sm leading-6 text-red-700"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-red-100 font-bold text-red-600">
-                                            !
-                                        </span>
-
-                                        <p>{error}</p>
-                                    </div>
-                                </div>
-                            )}
                         </div>
 
-                        {/* Registration panel */}
-                        <aside className="lg:sticky lg:top-6 lg:self-start">
-                            <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-2xl shadow-gray-300/40">
-                                <div className="bg-gray-950 p-6 sm:p-7">
-                                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-500">
-                                        Attendance
-                                    </p>
-
-                                    <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">
-                                        {isOwner
-                                            ? "Manage your event"
-                                            : isRegistered
-                                                ? "You're going"
-                                                : "Ready to attend?"}
-                                    </h2>
-
-                                    <p className="mt-2 text-sm leading-6 text-gray-400">
-                                        {isOwner
-                                            ? "Manage registrations and attendance from your events dashboard."
-                                            : isRegistered
-                                                ? "Your place is currently reserved for this event."
-                                                : "Secure your place before registration closes."}
-                                    </p>
+                        {/* Admit-one stub */}
+                        <aside className="lg:sticky lg:top-24 lg:self-start" aria-label="Registration">
+                            <div className="ticket overflow-hidden">
+                                <div className="flex items-center justify-between bg-ink px-5 py-3 text-card">
+                                    <span className="font-mono text-xs font-semibold uppercase tracking-[0.24em]">
+                                        Admit one
+                                    </span>
+                                    <TicketIcon size={18} className="text-sun" />
                                 </div>
 
-                                <div className="p-6 sm:p-7">
-                                    {/* Event summary */}
-                                    <div className="space-y-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-sm">
-                                                📅
-                                            </div>
-
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-gray-400">
-                                                    Date
-                                                </p>
-
-                                                <p className="mt-1 text-sm font-bold text-gray-900">
-                                                    {formatShortDate(
-                                                        event.startTime
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-50 text-sm">
-                                                🕐
-                                            </div>
-
-                                            <div>
-                                                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-gray-400">
-                                                    Starts
-                                                </p>
-
-                                                <p className="mt-1 text-sm font-bold text-gray-900">
-                                                    {formatTime(
-                                                        event.startTime
-                                                    )}
-                                                </p>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-50 text-sm">
-                                                📍
-                                            </div>
-
-                                            <div className="min-w-0">
-                                                <p className="text-xs font-semibold uppercase tracking-[0.1em] text-gray-400">
-                                                    Location
-                                                </p>
-
-                                                <p className="mt-1 truncate text-sm font-bold text-gray-900">
-                                                    {event.location}
-                                                </p>
-                                            </div>
-                                        </div>
+                                <div className="flex items-center gap-5 p-5">
+                                    <DateStub
+                                        value={event.startTime}
+                                        className="w-20 shrink-0 rounded-xl border-2 border-ink bg-paper py-3"
+                                    />
+                                    <div className="min-w-0">
+                                        <p className="font-display text-lg font-extrabold leading-tight">
+                                            {formatTimeRange(event.startTime, event.endTime)}
+                                        </p>
+                                        <p className="mt-1 truncate text-sm text-ink-soft">
+                                            {event.location}
+                                        </p>
                                     </div>
+                                </div>
 
-                                    <div className="my-6 border-t border-gray-200" />
-
-                                    {/* Owner */}
+                                <div className="perf-x p-5" aria-live="polite">
                                     {isOwner ? (
-                                        <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5">
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-                                                    ✓
-                                                </div>
-
-                                                <div>
-                                                    <h3 className="font-bold text-blue-950">
-                                                        This is your event
-                                                    </h3>
-
-                                                    <p className="mt-1 text-xs leading-5 text-blue-700">
-                                                        Manage your event,
-                                                        registrations, and
-                                                        attendance.
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <Link
-                                                href="/events/my-events"
-                                                className="mt-5 flex w-full items-center justify-center rounded-xl bg-blue-600 px-5 py-3.5 text-sm font-bold text-white transition hover:bg-blue-700"
-                                            >
-                                                Manage Event
+                                        <>
+                                            <h2 className="font-display text-xl font-extrabold">
+                                                This one&apos;s yours
+                                            </h2>
+                                            <p className="mt-1 text-sm leading-6 text-ink-soft">
+                                                See who&apos;s registered and manage
+                                                details from your hosting desk.
+                                            </p>
+                                            <Link href="/events/my-events" className="btn btn-primary mt-5 w-full">
+                                                Open hosting desk
+                                                <ArrowRightIcon size={16} strokeWidth={2.5} />
                                             </Link>
-                                        </div>
+                                        </>
                                     ) : isRegistered ? (
-                                        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 font-bold text-emerald-700">
-                                                    ✓
-                                                </div>
-
+                                        <>
+                                            <div className="flex items-center gap-3">
+                                                <span className="flex h-11 w-11 -rotate-6 items-center justify-center rounded-xl border-2 border-ink bg-moss text-white">
+                                                    <CheckIcon size={22} strokeWidth={3} />
+                                                </span>
                                                 <div>
-                                                    <h3 className="font-bold text-emerald-950">
-                                                        Registration confirmed
-                                                    </h3>
-
-                                                    <p className="mt-1 text-xs leading-5 text-emerald-700">
-                                                        Your place is reserved
-                                                        for this event.
+                                                    <h2 className="font-display text-xl font-extrabold">
+                                                        {justRegistered ? "You're on the list!" : "You're going"}
+                                                    </h2>
+                                                    <p className="text-sm text-ink-soft">
+                                                        Your spot is saved.
                                                     </p>
                                                 </div>
                                             </div>
-
-                                            {event.status === "PUBLISHED" &&
-                                                !eventHasStarted && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={
-                                                            handleCancelRegistration
-                                                        }
-                                                        disabled={registering}
-                                                        className="mt-5 flex w-full items-center justify-center rounded-xl border border-red-200 bg-white px-5 py-3.5 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                                    >
-                                                        {registering
-                                                            ? "Cancelling..."
-                                                            : "Cancel Registration"}
-                                                    </button>
-                                                )}
-                                        </div>
+                                            <Link href="/registrations" className="btn btn-outline mt-5 w-full">
+                                                View my tickets
+                                            </Link>
+                                            {registrationOpen && (
+                                                <button
+                                                    type="button"
+                                                    onClick={handleCancelRegistration}
+                                                    disabled={registering}
+                                                    className="btn btn-ghost mt-2 w-full text-signal-deep"
+                                                >
+                                                    {registering ? (
+                                                        <>
+                                                            <SpinnerIcon size={16} />
+                                                            Releasing spot…
+                                                        </>
+                                                    ) : (
+                                                        "Can't make it? Cancel"
+                                                    )}
+                                                </button>
+                                            )}
+                                        </>
                                     ) : canRegister ? (
-                                        <div>
+                                        <>
+                                            <h2 className="font-display text-xl font-extrabold">
+                                                Want in?
+                                            </h2>
+                                            <p className="mt-1 text-sm leading-6 text-ink-soft">
+                                                {plural(event.capacity, "spot")} in
+                                                total. Registration closes when it
+                                                starts.
+                                            </p>
                                             <button
                                                 type="button"
                                                 onClick={handleRegister}
                                                 disabled={registering}
-                                                className="group flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-4 text-sm font-bold text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 hover:shadow-blue-600/30 disabled:cursor-not-allowed disabled:opacity-50"
+                                                className="btn btn-signal btn-lg mt-5 w-full"
                                             >
-                                                <span>
-                                                    {registering
-                                                        ? "Registering..."
-                                                        : "Register for Event"}
-                                                </span>
-
-                                                {!registering && (
-                                                    <span className="text-lg transition-transform group-hover:translate-x-1">
-                                                        →
-                                                    </span>
+                                                {registering ? (
+                                                    <>
+                                                        <SpinnerIcon size={18} />
+                                                        Saving your spot…
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        Save my spot
+                                                        <ArrowRightIcon size={18} strokeWidth={2.5} />
+                                                    </>
                                                 )}
                                             </button>
-
-                                            <p className="mt-3 text-center text-xs leading-5 text-gray-400">
-                                                Registration closes when the
-                                                event starts.
-                                            </p>
-                                        </div>
+                                        </>
                                     ) : (
-                                        <div className="rounded-2xl border border-gray-200 bg-gray-100 p-5">
-                                            <div className="flex items-start gap-3">
-                                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gray-200 font-bold text-gray-500">
-                                                    i
-                                                </div>
-
-                                                <div>
-                                                    <h3 className="font-bold text-gray-900">
-                                                        Registration unavailable
-                                                    </h3>
-
-                                                    <p className="mt-1 text-xs leading-5 text-gray-500">
-                                                        {event.status !==
-                                                        "PUBLISHED"
-                                                            ? "Registration is only available for published events."
-                                                            : eventHasStarted
-                                                                ? "Registration is closed because this event has already started."
-                                                                : "Registration is not available for this event."}
-                                                    </p>
-                                                </div>
+                                        <div className="flex gap-3">
+                                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-paper-deep">
+                                                <InfoIcon size={18} />
+                                            </span>
+                                            <div>
+                                                <h2 className="font-bold">Registration closed</h2>
+                                                <p className="mt-1 text-sm leading-6 text-ink-soft">
+                                                    {event.status !== "PUBLISHED"
+                                                        ? "Only published events take registrations."
+                                                        : eventHasStarted
+                                                          ? "This event has already started."
+                                                          : "Registration isn't available for this event."}
+                                                </p>
                                             </div>
                                         </div>
                                     )}
 
-                                    {!isOwner &&
-                                        event.status === "PUBLISHED" &&
-                                        !eventHasStarted && (
-                                            <div className="mt-5 flex items-center justify-center gap-2 text-xs font-medium text-gray-400">
-                                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                                                Registration is currently open
-                                            </div>
-                                        )}
+                                    {error && (
+                                        <div className="mt-4 flex gap-2 rounded-xl border-2 border-signal-deep bg-signal-wash p-3 text-sm text-ink" role="alert">
+                                            <AlertIcon size={18} className="mt-0.5 shrink-0 text-signal-deep" />
+                                            {error}
+                                        </div>
+                                    )}
                                 </div>
+
+                                {!isOwner && registrationOpen && (
+                                    <div className="flex items-center justify-center gap-2 border-t-2 border-ink bg-moss-wash px-5 py-2.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.16em] text-moss">
+                                        <span className="h-2 w-2 animate-pulse rounded-full bg-moss" />
+                                        Registration open
+                                    </div>
+                                )}
                             </div>
                         </aside>
                     </div>
                 </div>
             </main>
+
+            {dialog}
         </>
     );
 }

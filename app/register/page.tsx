@@ -1,10 +1,38 @@
-
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
+import AuthShell, { PasswordToggle } from "@/components/AuthShell";
+import { Notice } from "@/components/ui";
+import {
+    ArrowRightIcon,
+    CheckIcon,
+    GradCapIcon,
+    MegaphoneIcon,
+    SpinnerIcon,
+} from "@/components/icons";
 
 type Role = "STUDENT" | "ORGANIZER";
+
+const ROLES: {
+    value: Role;
+    title: string;
+    body: string;
+    Icon: typeof GradCapIcon;
+}[] = [
+    {
+        value: "STUDENT",
+        title: "Student",
+        body: "Find events and grab spots",
+        Icon: GradCapIcon,
+    },
+    {
+        value: "ORGANIZER",
+        title: "Organiser",
+        body: "Run events for a society or team",
+        Icon: MegaphoneIcon,
+    },
+];
 
 export default function RegisterPage() {
     const [name, setName] = useState("");
@@ -16,16 +44,16 @@ export default function RegisterPage() {
     const [role, setRole] = useState<Role>("STUDENT");
 
     const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] =
-        useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const [loading, setLoading] = useState(false);
 
-    async function handleRegister(
-        event: React.FormEvent
-    ) {
+    const mismatch =
+        confirmPassword.length > 0 && password !== confirmPassword;
+
+    async function handleRegister(event: React.FormEvent) {
         event.preventDefault();
 
         setError("");
@@ -55,19 +83,11 @@ export default function RegisterPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                setError(
-                    data.error || "Could not create account."
-                );
+                setError(data.error || "Could not create account.");
                 return;
             }
 
-            setSuccess(
-                `Account created successfully as ${
-    role === "STUDENT"
-        ? "Student"
-        : "Organizer"
-}!`
-            );
+            setSuccess(email);
 
             setName("");
             setEmail("");
@@ -82,368 +102,227 @@ export default function RegisterPage() {
     }
 
     return (
-        <main className="min-h-screen bg-gray-50">
-            <div className="mx-auto grid min-h-screen max-w-7xl lg:grid-cols-2">
-
-                {/* Brand section */}
-                <section className="hidden flex-col justify-between bg-gray-950 p-12 text-white lg:flex xl:p-16">
-                    <div>
-                        <Link
-                            href="/"
-                            className="inline-flex items-center gap-3"
-                        >
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-sm font-bold text-gray-950">
-                                CE
-                            </div>
-
-                            <div>
-                                <div className="text-base font-bold">
-                                    Campus Event
-                                </div>
-
-                                <div className="text-xs text-gray-400">
-                                    Platform
-                                </div>
-                            </div>
-                        </Link>
+        <AuthShell
+            poster={{
+                kicker: "Join the board",
+                headline: (
+                    <>
+                        Be where <span className="text-sun">it&apos;s</span>{" "}
+                        happening.
+                    </>
+                ),
+                body: "One account for every talk, social and workshop on campus, plus the ones you run yourself.",
+            }}
+        >
+            {success ? (
+                <div className="panel p-7 text-center sm:p-9" role="status">
+                    <div className="mx-auto flex h-16 w-16 -rotate-6 items-center justify-center rounded-2xl border-2 border-ink bg-moss text-white">
+                        <CheckIcon size={30} strokeWidth={2.75} />
                     </div>
-
-                    <div className="max-w-lg">
-                        <p className="mb-4 text-sm font-semibold uppercase tracking-[0.2em] text-gray-400">
-                            Your campus starts here
-                        </p>
-
-                        <h1 className="text-5xl font-bold leading-tight tracking-tight xl:text-6xl">
-                            Be part of what&apos;s happening.
-                        </h1>
-
-                        <p className="mt-6 max-w-md text-lg leading-8 text-gray-400">
-                            Join your campus community, discover events,
-                            and create experiences that bring students
-                            together.
-                        </p>
-                    </div>
-
-                    <p className="text-sm text-gray-500">
-                        Campus Event Platform
+                    <h2 className="display mt-6 text-4xl">You&apos;re in.</h2>
+                    <p className="mt-3 text-base leading-7 text-ink-soft">
+                        We sent a verification link to{" "}
+                        <strong className="text-ink">{success}</strong>. Open
+                        it to confirm your email, then sign in.
                     </p>
-                </section>
+                    <Link href="/login" className="btn btn-primary btn-lg mt-8 w-full">
+                        Go to sign in
+                        <ArrowRightIcon size={18} strokeWidth={2.5} />
+                    </Link>
+                </div>
+            ) : (
+                <>
+                    <p className="eyebrow">Create account</p>
+                    <h2 className="display mt-3 text-5xl">Pull up a chair.</h2>
+                    <p className="mt-3 text-base leading-7 text-ink-soft">
+                        Takes about thirty seconds.
+                    </p>
 
-                {/* Registration section */}
-                <section className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-16">
-                    <div className="w-full max-w-md">
-
-                        {/* Mobile brand */}
-                        <div className="mb-8 flex items-center gap-3 lg:hidden">
-                            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-950 text-sm font-bold text-white">
-                                CE
+                    <form onSubmit={handleRegister} className="mt-9 space-y-5">
+                        <fieldset>
+                            <legend className="field-label">I&apos;m here as a…</legend>
+                            <div className="grid grid-cols-2 gap-3">
+                                {ROLES.map(({ value, title, body, Icon }) => {
+                                    const checked = role === value;
+                                    return (
+                                        <label
+                                            key={value}
+                                            className={`relative cursor-pointer rounded-xl border-2 border-ink p-4 transition-all duration-150 has-[:focus-visible]:outline has-[:focus-visible]:outline-[2.5px] has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-signal ${
+                                                checked
+                                                    ? "bg-ink text-card shadow-[3px_3px_0_0_var(--color-signal)]"
+                                                    : "bg-card hover:bg-sun-wash"
+                                            }`}
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="role"
+                                                value={value}
+                                                checked={checked}
+                                                onChange={() => setRole(value)}
+                                                className="sr-only"
+                                            />
+                                            <span className="flex items-center justify-between">
+                                                <Icon size={22} />
+                                                <span
+                                                    className={`flex h-5 w-5 items-center justify-center rounded-full border-2 ${
+                                                        checked
+                                                            ? "border-sun bg-sun text-ink"
+                                                            : "border-ink"
+                                                    }`}
+                                                >
+                                                    {checked && (
+                                                        <CheckIcon size={12} strokeWidth={3.5} />
+                                                    )}
+                                                </span>
+                                            </span>
+                                            <span className="mt-4 block font-display text-lg font-extrabold">
+                                                {title}
+                                            </span>
+                                            <span
+                                                className={`mt-0.5 block text-xs leading-5 ${
+                                                    checked ? "text-card/70" : "text-ink-mute"
+                                                }`}
+                                            >
+                                                {body}
+                                            </span>
+                                        </label>
+                                    );
+                                })}
                             </div>
+                        </fieldset>
 
-                            <div>
-                                <div className="text-base font-bold text-gray-950">
-                                    Campus Event
-                                </div>
-
-                                <div className="text-xs text-gray-500">
-                                    Platform
-                                </div>
-                            </div>
+                        <div>
+                            <label htmlFor="name" className="field-label">
+                                Full name
+                            </label>
+                            <input
+                                id="name"
+                                type="text"
+                                value={name}
+                                onChange={(event) => setName(event.target.value)}
+                                placeholder="Ama Mensah"
+                                autoComplete="name"
+                                required
+                                className="field"
+                            />
                         </div>
 
-                        <div className="mb-7">
-                            <p className="mb-2 text-sm font-semibold text-gray-500">
-                                Get started
-                            </p>
-
-                            <h2 className="text-3xl font-bold tracking-tight text-gray-950 sm:text-4xl">
-                                Create your account
-                            </h2>
-
-                            <p className="mt-3 text-sm leading-6 text-gray-600">
-                                Join your campus community and start
-                                discovering what&apos;s happening.
-                            </p>
+                        <div>
+                            <label htmlFor="email" className="field-label">
+                                Email
+                            </label>
+                            <input
+                                id="email"
+                                type="email"
+                                value={email}
+                                onChange={(event) => setEmail(event.target.value)}
+                                placeholder="you@university.edu"
+                                autoComplete="email"
+                                inputMode="email"
+                                required
+                                className="field"
+                            />
                         </div>
 
-                        <form
-                            onSubmit={handleRegister}
-                            className="space-y-5"
-                        >
-                            {/* Name */}
+                        <div className="grid gap-5 sm:grid-cols-2">
                             <div>
-                                <label
-                                    htmlFor="name"
-                                    className="mb-2 block text-sm font-semibold text-gray-800"
-                                >
-                                    Full name
-                                </label>
-
-                                <input
-                                    id="name"
-                                    type="text"
-                                    value={name}
-                                    onChange={(event) =>
-                                        setName(event.target.value)
-                                    }
-                                    placeholder="Enter your full name"
-                                    autoComplete="name"
-                                    required
-                                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10"
-                                />
-                            </div>
-
-                            {/* Email */}
-                            <div>
-                                <label
-                                    htmlFor="email"
-                                    className="mb-2 block text-sm font-semibold text-gray-800"
-                                >
-                                    Email address
-                                </label>
-
-                                <input
-                                    id="email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(event) =>
-                                        setEmail(event.target.value)
-                                    }
-                                    placeholder="you@example.com"
-                                    autoComplete="email"
-                                    required
-                                    className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10"
-                                />
-                            </div>
-
-                            {/* Password */}
-                            <div>
-                                <label
-                                    htmlFor="password"
-                                    className="mb-2 block text-sm font-semibold text-gray-800"
-                                >
+                                <label htmlFor="password" className="field-label">
                                     Password
                                 </label>
-
                                 <div className="relative">
                                     <input
                                         id="password"
-                                        type={
-                                            showPassword
-                                                ? "text"
-                                                : "password"
-                                        }
+                                        type={showPassword ? "text" : "password"}
                                         value={password}
-                                        onChange={(event) =>
-                                            setPassword(event.target.value)
-                                        }
-                                        placeholder="Create a password"
+                                        onChange={(event) => setPassword(event.target.value)}
                                         autoComplete="new-password"
                                         minLength={6}
                                         required
-                                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 pr-16 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10"
+                                        aria-describedby="password-hint"
+                                        className="field pr-14"
                                     />
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setShowPassword(!showPassword)
-                                        }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
-                                    >
-                                        {showPassword ? "Hide" : "Show"}
-                                    </button>
+                                    <PasswordToggle
+                                        shown={showPassword}
+                                        onToggle={() => setShowPassword((s) => !s)}
+                                        controls="password"
+                                    />
                                 </div>
-
-                                <p className="mt-2 text-xs text-gray-500">
-                                    Use at least 6 characters.
+                                <p id="password-hint" className="field-hint">
+                                    6+ characters.
                                 </p>
                             </div>
 
-                            {/* Confirm password */}
                             <div>
-                                <label
-                                    htmlFor="confirmPassword"
-                                    className="mb-2 block text-sm font-semibold text-gray-800"
-                                >
-                                    Confirm password
+                                <label htmlFor="confirmPassword" className="field-label">
+                                    Confirm
                                 </label>
-
                                 <div className="relative">
                                     <input
                                         id="confirmPassword"
-                                        type={
-                                            showConfirmPassword
-                                                ? "text"
-                                                : "password"
-                                        }
+                                        type={showConfirmPassword ? "text" : "password"}
                                         value={confirmPassword}
                                         onChange={(event) =>
-                                            setConfirmPassword(
-                                                event.target.value
-                                            )
+                                            setConfirmPassword(event.target.value)
                                         }
-                                        placeholder="Confirm your password"
                                         autoComplete="new-password"
                                         minLength={6}
                                         required
-                                        className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 pr-16 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10"
+                                        aria-invalid={mismatch || undefined}
+                                        aria-describedby="confirm-hint"
+                                        className="field pr-14"
                                     />
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setShowConfirmPassword(
-                                                !showConfirmPassword
-                                            )
-                                        }
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-semibold text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
-                                    >
-                                        {showConfirmPassword
-                                            ? "Hide"
-                                            : "Show"}
-                                    </button>
+                                    <PasswordToggle
+                                        shown={showConfirmPassword}
+                                        onToggle={() => setShowConfirmPassword((s) => !s)}
+                                        controls="confirmPassword"
+                                    />
                                 </div>
-                            </div>
-
-                            {/* Account type */}
-                            <div>
-                                <label className="mb-3 block text-sm font-semibold text-gray-800">
-                                    Account type
-                                </label>
-
-                                <div className="grid grid-cols-2 gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setRole("STUDENT")
-                                        }
-                                        className={`rounded-xl border p-4 text-left transition ${
-    role === "STUDENT"
-        ? "border-gray-950 bg-gray-950 text-white shadow-sm"
-        : "border-gray-300 bg-white text-gray-900 hover:border-gray-400 hover:bg-gray-50"
-}`}
-                                    >
-                                        <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-lg">
-                                            🎓
-                                        </div>
-
-                                        <div className="font-semibold">
-                                            Student
-                                        </div>
-
-                                        <div
-                                            className={`mt-1 text-xs leading-5 ${
-    role === "STUDENT"
-        ? "text-gray-400"
-        : "text-gray-500"
-}`}
-                                        >
-                                            Attend campus events
-                                        </div>
-                                    </button>
-
-                                    <button
-                                        type="button"
-                                        onClick={() =>
-                                            setRole("ORGANIZER")
-                                        }
-                                        className={`rounded-xl border p-4 text-left transition ${
-    role === "ORGANIZER"
-        ? "border-gray-950 bg-gray-950 text-white shadow-sm"
-        : "border-gray-300 bg-white text-gray-900 hover:border-gray-400 hover:bg-gray-50"
-}`}
-                                    >
-                                        <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg bg-gray-100 text-lg">
-                                            💼
-                                        </div>
-
-                                        <div className="font-semibold">
-                                            Organizer
-                                        </div>
-
-                                        <div
-                                            className={`mt-1 text-xs leading-5 ${
-    role === "ORGANIZER"
-        ? "text-gray-400"
-        : "text-gray-500"
-}`}
-                                        >
-                                            Create and manage events
-                                        </div>
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Selected role */}
-                            <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
-                                <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-                                    Selected account
-                                </p>
-
-                                <p className="mt-1 text-sm font-semibold text-gray-900">
-                                    {role === "STUDENT"
-                                        ? "🎓 Student"
-                                        : "💼 Organizer"}
+                                <p
+                                    id="confirm-hint"
+                                    className={`field-hint ${mismatch ? "!text-signal-deep font-semibold" : ""}`}
+                                    aria-live="polite"
+                                >
+                                    {mismatch
+                                        ? "Doesn't match yet."
+                                        : confirmPassword && password === confirmPassword
+                                          ? "Matches."
+                                          : "Type it once more."}
                                 </p>
                             </div>
-
-                            {/* Messages */}
-                            {error && (
-                                <div
-                                    role="alert"
-                                    className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700"
-                                >
-                                    {error}
-                                </div>
-                            )}
-
-                            {success && (
-                                <div
-                                    role="status"
-                                    className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-700"
-                                >
-                                    {success}
-                                </div>
-                            )}
-
-                            {/* Submit */}
-                            <button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full rounded-xl bg-gray-950 px-4 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 focus:outline-none focus:ring-4 focus:ring-gray-950/15 disabled:cursor-not-allowed disabled:opacity-60"
-                            >
-                                {loading
-                                    ? "Creating account..."
-                                    : "Create account"}
-                            </button>
-                        </form>
-
-                        <div className="my-7 flex items-center gap-4">
-                            <div className="h-px flex-1 bg-gray-200" />
-
-                            <span className="text-xs font-medium text-gray-400">
-                                ALREADY A MEMBER?
-                            </span>
-
-                            <div className="h-px flex-1 bg-gray-200" />
                         </div>
 
+                        {error && <Notice tone="error">{error}</Notice>}
+
+                        <button
+                            type="submit"
+                            disabled={loading}
+                            className="btn btn-primary btn-lg w-full"
+                        >
+                            {loading ? (
+                                <>
+                                    <SpinnerIcon size={18} />
+                                    Creating account…
+                                </>
+                            ) : (
+                                <>
+                                    Create my account
+                                    <ArrowRightIcon size={18} strokeWidth={2.5} />
+                                </>
+                            )}
+                        </button>
+                    </form>
+
+                    <p className="mt-8 text-center text-sm text-ink-soft">
+                        Already have an account?{" "}
                         <Link
                             href="/login"
-                            className="block w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-center text-sm font-semibold text-gray-800 transition hover:border-gray-400 hover:bg-gray-50"
+                            className="font-bold text-ink underline decoration-signal decoration-2 underline-offset-4 hover:decoration-ink"
                         >
-                            Sign in instead
+                            Sign in
                         </Link>
-
-                        <p className="mt-7 text-center text-xs leading-5 text-gray-500">
-                            By creating an account, you agree to use the
-                            platform responsibly and respect your campus
-                            community.
-                        </p>
-                    </div>
-                </section>
-            </div>
-        </main>
+                    </p>
+                </>
+            )}
+        </AuthShell>
     );
 }
-

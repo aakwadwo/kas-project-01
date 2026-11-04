@@ -1,14 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
-
-type EventStatus =
-    | "DRAFT"
-    | "PUBLISHED"
-    | "CANCELLED"
-    | "COMPLETED";
+import EventTicket from "@/components/EventTicket";
+import {
+    EmptyState,
+    Notice,
+    PageHeader,
+    Tag,
+    useConfirm,
+} from "@/components/ui";
+import {
+    ArrowRightIcon,
+    CalendarIcon,
+    EditIcon,
+    MegaphoneIcon,
+    PlusIcon,
+    SearchIcon,
+    SpinnerIcon,
+} from "@/components/icons";
+import type { EventStatus } from "@/lib/ui/format";
 
 type Event = {
     id: string;
@@ -28,18 +40,33 @@ type CurrentUser = {
     email: string;
 };
 
+type Filter = "all" | "week" | "mine";
+
+const FILTERS: { value: Filter; label: string }[] = [
+    { value: "all", label: "Everything" },
+    { value: "week", label: "Next 7 days" },
+    { value: "mine", label: "Posted by me" },
+];
+
 export default function EventsPage() {
     const [events, setEvents] = useState<Event[]>([]);
     const [user, setUser] = useState<CurrentUser | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState("");
-    const [actionLoading, setActionLoading] =
-        useState<string | null>(null);
+    const [actionError, setActionError] = useState("");
+    const [actionLoading, setActionLoading] = useState<string | null>(null);
+    const [now, setNow] = useState(() => Date.now());
+
+    const [query, setQuery] = useState("");
+    const [filter, setFilter] = useState<Filter>("all");
+
+    const { confirm, dialog } = useConfirm();
 
     async function loadData() {
         try {
             setLoading(true);
             setError("");
+            setNow(Date.now());
 
             const userResponse = await fetch("/api/auth/me", {
                 cache: "no-store",
@@ -70,16 +97,11 @@ export default function EventsPage() {
                 }
 
                 const eventsData = await eventsResponse.json();
-
-                setError(
-                    eventsData.error || "Could not load events."
-                );
-
+                setError(eventsData.error || "Could not load events.");
                 return;
             }
 
             const eventsData = await eventsResponse.json();
-
             setEvents(eventsData.events || []);
         } catch {
             setError("Could not connect to the server.");
@@ -100,70 +122,18 @@ export default function EventsPage() {
         window.addEventListener("pageshow", handlePageShow);
 
         return () => {
-            window.removeEventListener(
-                "pageshow",
-                handlePageShow
-            );
+            window.removeEventListener("pageshow", handlePageShow);
         };
     }, []);
 
-    function formatDate(dateString: string) {
-        return new Date(dateString).toLocaleDateString(
-            undefined,
-            {
-                weekday: "short",
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-            }
-        );
-    }
-
-    function formatTime(dateString: string) {
-        return new Date(dateString).toLocaleTimeString(
-            undefined,
-            {
-                hour: "numeric",
-                minute: "2-digit",
-            }
-        );
-    }
-
-    function getStatusStyles(status: EventStatus) {
-        switch (status) {
-            case "PUBLISHED":
-                return "border-emerald-200 bg-emerald-50 text-emerald-700";
-
-            case "CANCELLED":
-                return "border-red-200 bg-red-50 text-red-700";
-
-            case "COMPLETED":
-                return "border-gray-200 bg-gray-100 text-gray-600";
-
-            default:
-                return "border-amber-200 bg-amber-50 text-amber-700";
-        }
-    }
-
-    function getStatusLabel(status: EventStatus) {
-        switch (status) {
-            case "PUBLISHED":
-                return "Published";
-
-            case "CANCELLED":
-                return "Cancelled";
-
-            case "COMPLETED":
-                return "Completed";
-
-            default:
-                return "Draft";
-        }
-    }
-
-    async function handlePublish(eventId: string) {
+    async function updateStatus(
+        eventId: string,
+        status: "PUBLISHED" | "CANCELLED",
+        failMessage: string
+    ) {
         try {
             setActionLoading(eventId);
+            setActionError("");
 
             const response = await fetch("/api/events", {
                 method: "PUT",
@@ -171,10 +141,7 @@ export default function EventsPage() {
                     "Content-Type": "application/json",
                 },
                 cache: "no-store",
-                body: JSON.stringify({
-                    id: eventId,
-                    status: "PUBLISHED",
-                }),
+                body: JSON.stringify({ id: eventId, status }),
             });
 
             if (response.status === 401) {
@@ -185,465 +152,300 @@ export default function EventsPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                alert(
-                    data.error ||
-                    "Could not publish event."
-                );
+                setActionError(data.error || failMessage);
                 return;
             }
 
             await loadData();
         } catch {
-            alert("Could not connect to the server.");
+            setActionError("Could not connect to the server.");
         } finally {
             setActionLoading(null);
         }
     }
 
-    async function handleCancel(eventId: string) {
-        const confirmed = window.confirm(
-            "Are you sure you want to cancel this event?"
-        );
+    function handlePublish(eventId: string) {
+        return updateStatus(eventId, "PUBLISHED", "Could not publish event.");
+    }
 
-        if (!confirmed) {
-            return;
-        }
+    async function handleCancel(event: Event) {
+        const confirmed = await confirm({
+            title: "Cancel this event?",
+            body: `"${event.title}" will be marked as cancelled for everyone who registered. This can't be undone.`,
+            confirmLabel: "Cancel event",
+            destructive: true,
+        });
 
-        try {
-            setActionLoading(eventId);
+        if (!confirmed) return;
 
-            const response = await fetch("/api/events", {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                cache: "no-store",
-                body: JSON.stringify({
-                    id: eventId,
-                    status: "CANCELLED",
-                }),
-            });
+        await updateStatus(event.id, "CANCELLED", "Could not cancel event.");
+    }
 
-            if (response.status === 401) {
-                window.location.replace("/login");
-                return;
-            }
+    const visible = useMemo(() => {
+        const q = query.trim().toLowerCase();
+        const weekAhead = now + 7 * 86_400_000;
 
-            const data = await response.json();
-
-            if (!response.ok) {
-                alert(
-                    data.error ||
-                    "Could not cancel event."
+        return [...events]
+            .filter((event) => {
+                if (filter === "mine" && event.organizerId !== user?.id) {
+                    return false;
+                }
+                if (filter === "week") {
+                    const t = new Date(event.startTime).getTime();
+                    if (t > weekAhead) return false;
+                }
+                if (!q) return true;
+                return (
+                    event.title.toLowerCase().includes(q) ||
+                    event.location.toLowerCase().includes(q) ||
+                    event.description.toLowerCase().includes(q)
                 );
-                return;
-            }
-
-            await loadData();
-        } catch {
-            alert("Could not connect to the server.");
-        } finally {
-            setActionLoading(null);
-        }
-    }
-
-    if (loading) {
-        return (
-            <>
-                <Navbar />
-
-                <main className="min-h-screen bg-gray-50 px-5 py-10 sm:px-8 md:py-14">
-                    <div className="mx-auto max-w-7xl">
-                        <div className="mb-10 animate-pulse">
-                            <div className="h-3 w-28 rounded bg-gray-200" />
-                            <div className="mt-4 h-11 w-64 rounded-lg bg-gray-200" />
-                            <div className="mt-4 h-5 w-96 max-w-full rounded bg-gray-200" />
-                        </div>
-
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                            {Array.from({ length: 6 }).map(
-                                (_, index) => (
-                                    <div
-                                        key={index}
-                                        className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm"
-                                    >
-                                        <div className="animate-pulse p-6">
-                                            <div className="h-6 w-24 rounded-full bg-gray-200" />
-
-                                            <div className="mt-6 h-7 w-3/4 rounded bg-gray-200" />
-
-                                            <div className="mt-4 space-y-2">
-                                                <div className="h-4 rounded bg-gray-200" />
-                                                <div className="h-4 rounded bg-gray-200" />
-                                                <div className="h-4 w-2/3 rounded bg-gray-200" />
-                                            </div>
-
-                                            <div className="mt-7 space-y-4">
-                                                <div className="flex gap-3">
-                                                    <div className="h-9 w-9 rounded-lg bg-gray-200" />
-                                                    <div className="flex-1">
-                                                        <div className="h-3 w-12 rounded bg-gray-200" />
-                                                        <div className="mt-2 h-4 w-32 rounded bg-gray-200" />
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex gap-3">
-                                                    <div className="h-9 w-9 rounded-lg bg-gray-200" />
-                                                    <div className="flex-1">
-                                                        <div className="h-3 w-12 rounded bg-gray-200" />
-                                                        <div className="mt-2 h-4 w-28 rounded bg-gray-200" />
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex gap-3">
-                                                    <div className="h-9 w-9 rounded-lg bg-gray-200" />
-                                                    <div className="flex-1">
-                                                        <div className="h-3 w-16 rounded bg-gray-200" />
-                                                        <div className="mt-2 h-4 w-36 rounded bg-gray-200" />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="border-t border-gray-100 bg-gray-50 p-4">
-                                            <div className="h-10 rounded-lg bg-gray-200" />
-                                        </div>
-                                    </div>
-                                )
-                            )}
-                        </div>
-                    </div>
-                </main>
-            </>
-        );
-    }
+            })
+            .sort(
+                (a, b) =>
+                    new Date(a.startTime).getTime() -
+                    new Date(b.startTime).getTime()
+            );
+    }, [events, filter, query, now, user]);
 
     return (
         <>
             <Navbar />
 
-            <main className="min-h-screen bg-gray-50 px-5 py-10 sm:px-8 md:py-14">
+            <main className="flex-1 px-4 py-10 sm:px-8 md:py-14">
                 <div className="mx-auto max-w-7xl">
+                    <PageHeader
+                        eyebrow="The board"
+                        title={
+                            <>
+                                What&apos;s <span className="mark">on</span>
+                            </>
+                        }
+                        description="Everything published around campus, soonest first. Tap a ticket for details and to save your spot."
+                        actions={
+                            <Link href="/events/create" className="btn btn-primary btn-lg">
+                                <PlusIcon size={18} strokeWidth={2.5} />
+                                Post an event
+                            </Link>
+                        }
+                    />
 
-                    {/* Page header */}
-                    <section className="mb-10">
-                        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-                            <div>
-                                <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-400">
-                                    Campus Events
-                                </p>
-
-                                <h1 className="mt-3 text-4xl font-bold tracking-tight text-gray-950 sm:text-5xl">
-                                    Discover events
-                                </h1>
-
-                                <p className="mt-4 max-w-2xl text-base leading-7 text-gray-600 sm:text-lg">
-                                    Find something happening on campus,
-                                    connect with your community, or create
-                                    an event of your own.
-                                </p>
+                    {/* Toolbar */}
+                    {!error && (loading || events.length > 0) && (
+                        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                            <div
+                                role="group"
+                                aria-label="Filter events"
+                                className="flex flex-wrap gap-2"
+                            >
+                                {FILTERS.map((f) => (
+                                    <button
+                                        key={f.value}
+                                        type="button"
+                                        aria-pressed={filter === f.value}
+                                        onClick={() => setFilter(f.value)}
+                                        className={`min-h-10 rounded-full border-2 border-ink px-4 text-sm font-bold transition-colors ${
+                                            filter === f.value
+                                                ? "bg-ink text-card"
+                                                : "bg-card hover:bg-sun-wash"
+                                        }`}
+                                    >
+                                        {f.label}
+                                    </button>
+                                ))}
                             </div>
 
-                            <Link
-                                href="/events/create"
-                                className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-gray-950 px-6 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800"
-                            >
-                                <span className="text-lg leading-none">
-                                    +
-                                </span>
-
-                                Create Event
-                            </Link>
+                            <div className="relative md:w-80">
+                                <label htmlFor="event-search" className="sr-only">
+                                    Search events
+                                </label>
+                                <SearchIcon
+                                    size={18}
+                                    strokeWidth={2.25}
+                                    className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink-mute"
+                                />
+                                <input
+                                    id="event-search"
+                                    type="search"
+                                    value={query}
+                                    onChange={(e) => setQuery(e.target.value)}
+                                    placeholder="Search title, place, topic"
+                                    className="field !min-h-11 pl-10"
+                                />
+                            </div>
                         </div>
-                    </section>
+                    )}
 
-                    {/* Error */}
+                    {actionError && (
+                        <div className="mb-6">
+                            <Notice tone="error" title="That didn't go through">
+                                {actionError}
+                            </Notice>
+                        </div>
+                    )}
+
                     {error && (
-                        <div
-                            role="alert"
-                            className="mb-8 rounded-2xl border border-red-200 bg-white p-5 shadow-sm"
+                        <Notice
+                            tone="error"
+                            title="Couldn't load the board"
+                            action={
+                                <button
+                                    type="button"
+                                    onClick={loadData}
+                                    className="btn btn-outline btn-sm"
+                                >
+                                    Try again
+                                </button>
+                            }
                         >
-                            <div className="flex items-start gap-4">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-red-50 font-bold text-red-600">
-                                    !
-                                </div>
+                            {error}
+                        </Notice>
+                    )}
 
-                                <div>
-                                    <h2 className="font-bold text-gray-950">
-                                        Something went wrong
-                                    </h2>
+                    {loading && <TicketSkeletons />}
 
-                                    <p className="mt-1 text-sm leading-6 text-red-600">
-                                        {error}
+                    {!loading && !error && events.length === 0 && (
+                        <EmptyState
+                            icon={<CalendarIcon size={28} />}
+                            eyebrow="Quiet week"
+                            title="The board is empty"
+                            action={
+                                <Link href="/events/create" className="btn btn-signal btn-lg">
+                                    Pin the first event
+                                    <ArrowRightIcon size={18} strokeWidth={2.5} />
+                                </Link>
+                            }
+                        >
+                            Nothing has been published yet. Be the one who
+                            gives campus something to look forward to.
+                        </EmptyState>
+                    )}
+
+                    {!loading && !error && events.length > 0 && (
+                        <>
+                            <p className="mb-5 font-mono text-xs font-semibold uppercase tracking-[0.14em] text-ink-mute" aria-live="polite">
+                                {visible.length} of {events.length}{" "}
+                                {events.length === 1 ? "event" : "events"}
+                            </p>
+
+                            {visible.length === 0 ? (
+                                <div className="rounded-2xl border-2 border-dashed border-ink/40 p-10 text-center">
+                                    <p className="font-display text-xl font-extrabold">
+                                        Nothing matches that.
                                     </p>
-
                                     <button
                                         type="button"
-                                        onClick={loadData}
-                                        className="mt-3 text-sm font-semibold text-gray-900 underline underline-offset-4 hover:no-underline"
+                                        onClick={() => {
+                                            setQuery("");
+                                            setFilter("all");
+                                        }}
+                                        className="btn btn-outline btn-sm mt-4"
                                     >
-                                        Try again
+                                        Clear filters
                                     </button>
                                 </div>
-                            </div>
-                        </div>
-                    )}
+                            ) : (
+                                <div className="stagger grid gap-7 md:grid-cols-2 xl:grid-cols-3">
+                                    {visible.map((event) => {
+                                        const isOwner =
+                                            user !== null &&
+                                            event.organizerId === user.id;
+                                        const busy = actionLoading === event.id;
+                                        const editable =
+                                            event.status !== "CANCELLED" &&
+                                            event.status !== "COMPLETED";
 
-                    {/* Empty state */}
-                    {!error && events.length === 0 && (
-                        <div className="rounded-2xl border border-gray-200 bg-white px-6 py-16 text-center shadow-sm sm:px-10">
-                            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-2xl">
-                                📅
-                            </div>
-
-                            <p className="mt-6 text-xs font-bold uppercase tracking-[0.16em] text-gray-400">
-                                Your campus calendar
-                            </p>
-
-                            <h2 className="mt-2 text-2xl font-bold tracking-tight text-gray-950">
-                                No events yet
-                            </h2>
-
-                            <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-gray-600">
-                                There are no published events available
-                                right now. Create the first one and give
-                                your campus community something to look
-                                forward to.
-                            </p>
-
-                            <Link
-                                href="/events/create"
-                                className="mt-7 inline-flex items-center justify-center rounded-xl bg-gray-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-800"
-                            >
-                                Create the first event
-                            </Link>
-                        </div>
-                    )}
-
-                    {/* Event count */}
-                    {!error && events.length > 0 && (
-                        <div className="mb-5 flex items-center justify-between">
-                            <p className="text-sm font-medium text-gray-500">
-                                Showing{" "}
-                                <span className="font-bold text-gray-900">
-                                    {events.length}
-                                </span>{" "}
-                                {events.length === 1
-                                    ? "event"
-                                    : "events"}
-                            </p>
-                        </div>
-                    )}
-
-                    {/* Events */}
-                    {!error && events.length > 0 && (
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                            {events.map((event) => {
-                                const isOwner =
-                                    user !== null &&
-                                    event.organizerId === user.id;
-
-                                const isActionLoading =
-                                    actionLoading === event.id;
-
-                                return (
-                                    <article
-                                        key={event.id}
-                                        className="group flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition duration-200 hover:-translate-y-1 hover:shadow-lg"
-                                    >
-                                        {/* Card content */}
-                                        <div className="flex flex-1 flex-col p-6">
-                                            {/* Status row */}
-                                            <div className="flex items-center justify-between gap-3">
-                                                <span
-                                                    className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-semibold ${getStatusStyles(
-                                                        event.status
-                                                    )}`}
-                                                >
-                                                    <span className="mr-2 h-1.5 w-1.5 rounded-full bg-current" />
-
-                                                    {getStatusLabel(
-                                                        event.status
-                                                    )}
-                                                </span>
-
-                                                {isOwner && (
-                                                    <span className="rounded-full bg-gray-100 px-3 py-1.5 text-xs font-semibold text-gray-600">
-                                                        Your event
-                                                    </span>
-                                                )}
-                                            </div>
-
-                                            {/* Title */}
-                                            <h2 className="mt-5 line-clamp-2 min-h-[3.5rem] text-xl font-bold leading-tight tracking-tight text-gray-950">
-                                                {event.title}
-                                            </h2>
-
-                                            {/* Description */}
-                                            <p className="mt-3 line-clamp-3 min-h-[4.5rem] text-sm leading-6 text-gray-600">
-                                                {event.description}
-                                            </p>
-
-                                            {/* Details */}
-                                            <div className="mt-7 space-y-4">
-
-                                                {/* Date */}
-                                                <div className="flex items-start gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-sm">
-                                                        📅
-                                                    </div>
-
-                                                    <div className="min-w-0">
-                                                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                            Date
-                                                        </p>
-
-                                                        <p className="mt-1 text-sm font-semibold leading-5 text-gray-900">
-                                                            {formatDate(
-                                                                event.startTime
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Time */}
-                                                <div className="flex items-start gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-sm">
-                                                        🕐
-                                                    </div>
-
-                                                    <div className="min-w-0">
-                                                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                            Time
-                                                        </p>
-
-                                                        <p className="mt-1 text-sm font-semibold leading-5 text-gray-900">
-                                                            {formatTime(
-                                                                event.startTime
-                                                            )}{" "}
-                                                            –{" "}
-                                                            {formatTime(
-                                                                event.endTime
-                                                            )}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Location */}
-                                                <div className="flex items-start gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-sm">
-                                                        📍
-                                                    </div>
-
-                                                    <div className="min-w-0">
-                                                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                            Location
-                                                        </p>
-
-                                                        <p className="mt-1 truncate text-sm font-semibold leading-5 text-gray-900">
-                                                            {event.location}
-                                                        </p>
-                                                    </div>
-                                                </div>
-
-                                                {/* Capacity */}
-                                                <div className="flex items-start gap-3">
-                                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-sm">
-                                                        👥
-                                                    </div>
-
-                                                    <div className="min-w-0">
-                                                        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                            Capacity
-                                                        </p>
-
-                                                        <p className="mt-1 text-sm font-semibold leading-5 text-gray-900">
-                                                            {event.capacity}{" "}
-                                                            {event.capacity ===
-                                                            1
-                                                                ? "person"
-                                                                : "people"}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        {/* Card actions */}
-                                        <div className="border-t border-gray-100 bg-gray-50 p-4">
-                                            <div className="flex flex-wrap gap-2">
-                                                <Link
-                                                    href={`/events/${event.id}`}
-                                                    className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-center text-sm font-semibold text-gray-800 transition hover:bg-gray-100"
-                                                >
-                                                    View Event
-                                                </Link>
-
-                                                {isOwner &&
-                                                    event.status !==
-                                                    "CANCELLED" &&
-                                                    event.status !==
-                                                    "COMPLETED" && (
+                                        return (
+                                            <EventTicket
+                                                key={event.id}
+                                                event={event}
+                                                now={now}
+                                                badges={
+                                                    isOwner ? <Tag tone="sky">Yours</Tag> : null
+                                                }
+                                                actions={
+                                                    <>
                                                         <Link
-                                                            href={`/events/edit?id=${event.id}`}
-                                                            className="rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-800 transition hover:bg-gray-100"
+                                                            href={`/events/${event.id}`}
+                                                            className="btn btn-primary btn-sm flex-1"
+                                                            aria-label={`View ${event.title}`}
                                                         >
-                                                            Edit
+                                                            View
+                                                            <ArrowRightIcon size={15} strokeWidth={2.5} />
                                                         </Link>
-                                                    )}
 
-                                                {isOwner &&
-                                                    event.status ===
-                                                    "DRAFT" && (
-                                                        <button
-                                                            type="button"
-                                                            disabled={
-                                                                isActionLoading
-                                                            }
-                                                            onClick={() =>
-                                                                handlePublish(
-                                                                    event.id
-                                                                )
-                                                            }
-                                                            className="rounded-lg bg-gray-950 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        >
-                                                            {isActionLoading
-                                                                ? "Publishing..."
-                                                                : "Publish"}
-                                                        </button>
-                                                    )}
+                                                        {isOwner && event.status === "DRAFT" && (
+                                                            <button
+                                                                type="button"
+                                                                disabled={busy}
+                                                                onClick={() => handlePublish(event.id)}
+                                                                className="btn btn-signal btn-sm"
+                                                            >
+                                                                {busy ? (
+                                                                    <SpinnerIcon size={15} />
+                                                                ) : (
+                                                                    <MegaphoneIcon size={15} />
+                                                                )}
+                                                                Publish
+                                                            </button>
+                                                        )}
 
-                                                {isOwner &&
-                                                    event.status !==
-                                                    "CANCELLED" &&
-                                                    event.status !==
-                                                    "COMPLETED" && (
-                                                        <button
-                                                            type="button"
-                                                            disabled={
-                                                                isActionLoading
-                                                            }
-                                                            onClick={() =>
-                                                                handleCancel(
-                                                                    event.id
-                                                                )
-                                                            }
-                                                            className="rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-semibold text-red-600 transition hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                                        >
-                                                            {isActionLoading
-                                                                ? "Working..."
-                                                                : "Cancel"}
-                                                        </button>
-                                                    )}
-                                            </div>
-                                        </div>
-                                    </article>
-                                );
-                            })}
-                        </div>
+                                                        {isOwner && editable && (
+                                                            <>
+                                                                <Link
+                                                                    href={`/events/edit?id=${event.id}`}
+                                                                    className="btn btn-outline btn-sm !px-3"
+                                                                    aria-label={`Edit ${event.title}`}
+                                                                    title="Edit"
+                                                                >
+                                                                    <EditIcon size={16} />
+                                                                </Link>
+                                                                <button
+                                                                    type="button"
+                                                                    disabled={busy}
+                                                                    onClick={() => handleCancel(event)}
+                                                                    className="btn btn-ghost btn-sm text-signal-deep"
+                                                                >
+                                                                    Cancel
+                                                                </button>
+                                                            </>
+                                                        )}
+                                                    </>
+                                                }
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </main>
+
+            {dialog}
         </>
+    );
+}
+
+function TicketSkeletons() {
+    return (
+        <div className="grid gap-7 md:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading events">
+            {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="ticket flex h-64 overflow-hidden !shadow-none">
+                    <div className="w-24 border-r-2 border-dashed border-line p-4">
+                        <div className="skeleton mx-auto h-3 w-10" />
+                        <div className="skeleton mx-auto mt-3 h-10 w-12" />
+                        <div className="skeleton mx-auto mt-3 h-3 w-10" />
+                    </div>
+                    <div className="flex-1 space-y-3 p-5">
+                        <div className="skeleton h-5 w-20" />
+                        <div className="skeleton h-6 w-4/5" />
+                        <div className="skeleton h-4 w-full" />
+                        <div className="skeleton h-4 w-2/3" />
+                        <div className="skeleton mt-6 h-4 w-1/2" />
+                    </div>
+                </div>
+            ))}
+        </div>
     );
 }

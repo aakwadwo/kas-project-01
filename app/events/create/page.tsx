@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import { DayPicker } from "react-day-picker";
 import { format, startOfDay } from "date-fns";
 import "react-day-picker/style.css";
+import { BackLink, DateStub, Notice } from "@/components/ui";
+import {
+    ArrowRightIcon,
+    ClockIcon,
+    PinIcon,
+    SpinnerIcon,
+    UsersIcon,
+} from "@/components/icons";
+import { plural } from "@/lib/ui/format";
+
+const HOURS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
+const MINUTES = ["00", "15", "30", "45"];
 
 export default function CreateEventPage() {
     const [title, setTitle] = useState("");
@@ -61,10 +73,7 @@ export default function CreateEventPage() {
         checkUser();
     }, []);
 
-    function convertTo24Hour(
-        hour: string,
-        period: string
-    ): number {
+    function convertTo24Hour(hour: string, period: string): number {
         let hourNumber = Number(hour);
 
         if (period === "AM") {
@@ -90,12 +99,7 @@ export default function CreateEventPage() {
 
         const result = new Date(date);
 
-        result.setHours(
-            convertTo24Hour(hour, period),
-            Number(minute),
-            0,
-            0
-        );
+        result.setHours(convertTo24Hour(hour, period), Number(minute), 0, 0);
 
         return result;
     }
@@ -106,26 +110,24 @@ export default function CreateEventPage() {
         minute: string,
         period: string
     ) {
-        const dateTime = createDateTime(
-            date,
-            hour,
-            minute,
-            period
-        );
+        const dateTime = createDateTime(date, hour, minute, period);
 
         if (!dateTime) {
-            return "Select date and time";
+            return "Pick a date above";
         }
 
-        return format(
-            dateTime,
-            "EEEE, MMMM d, yyyy 'at' h:mm a"
-        );
+        return format(dateTime, "EEE d MMM yyyy 'at' h:mm a");
     }
 
-    async function handleCreateEvent(
-        event: React.FormEvent
-    ) {
+    function handleStartSelect(date: Date | undefined) {
+        setStartDate(date);
+        // Most events finish the same day — pre-fill the end date.
+        if (date && (!endDate || endDate < date)) {
+            setEndDate(date);
+        }
+    }
+
+    async function handleCreateEvent(event: React.FormEvent) {
         event.preventDefault();
 
         setError("");
@@ -138,33 +140,22 @@ export default function CreateEventPage() {
             startPeriod
         );
 
-        const endDateTime = createDateTime(
-            endDate,
-            endHour,
-            endMinute,
-            endPeriod
-        );
+        const endDateTime = createDateTime(endDate, endHour, endMinute, endPeriod);
 
         if (!startDateTime || !endDateTime) {
-            setError(
-                "Please select both a start date/time and an end date/time."
-            );
+            setError("Please select both a start date/time and an end date/time.");
             return;
         }
 
         const now = new Date();
 
         if (startDateTime <= now) {
-            setError(
-                "The event start time must be in the future."
-            );
+            setError("The event start time must be in the future.");
             return;
         }
 
         if (endDateTime <= startDateTime) {
-            setError(
-                "The event end time must be after the start time."
-            );
+            setError("The event end time must be after the start time.");
             return;
         }
 
@@ -200,15 +191,11 @@ export default function CreateEventPage() {
             const data = await response.json();
 
             if (!response.ok) {
-                setError(
-                    data.error || "Could not create event."
-                );
+                setError(data.error || "Could not create event.");
                 return;
             }
 
-            setSuccess(
-                "Event created successfully. You can now find it in My Events."
-            );
+            setSuccess(title);
 
             setTitle("");
             setDescription("");
@@ -233,32 +220,11 @@ export default function CreateEventPage() {
         return (
             <>
                 <Navbar />
-
-                <main className="min-h-screen bg-gray-50 px-5 py-12 sm:px-8">
-                    <div className="mx-auto max-w-3xl animate-pulse">
-                        <div className="h-4 w-28 rounded bg-gray-200" />
-
-                        <div className="mt-6 rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
-                            <div className="h-10 w-64 rounded-lg bg-gray-200" />
-                            <div className="mt-4 h-5 w-96 max-w-full rounded bg-gray-200" />
-
-                            <div className="mt-10 space-y-7">
-                                <div>
-                                    <div className="h-4 w-28 rounded bg-gray-200" />
-                                    <div className="mt-3 h-12 rounded-xl bg-gray-200" />
-                                </div>
-
-                                <div>
-                                    <div className="h-4 w-24 rounded bg-gray-200" />
-                                    <div className="mt-3 h-32 rounded-xl bg-gray-200" />
-                                </div>
-
-                                <div>
-                                    <div className="h-4 w-24 rounded bg-gray-200" />
-                                    <div className="mt-3 h-12 rounded-xl bg-gray-200" />
-                                </div>
-                            </div>
-                        </div>
+                <main className="flex-1 px-4 py-10 sm:px-8" aria-busy="true">
+                    <div className="mx-auto max-w-6xl space-y-4">
+                        <div className="skeleton h-5 w-28" />
+                        <div className="skeleton h-14 w-80" />
+                        <div className="skeleton mt-8 h-[28rem] w-full rounded-2xl" />
                     </div>
                 </main>
             </>
@@ -269,29 +235,13 @@ export default function CreateEventPage() {
         return (
             <>
                 <Navbar />
-
-                <main className="min-h-screen bg-gray-50 px-5 py-12 sm:px-8">
+                <main className="flex-1 px-4 py-10 sm:px-8">
                     <div className="mx-auto max-w-2xl">
-                        <div className="rounded-2xl border border-red-200 bg-white p-8 shadow-sm">
-                            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50 font-bold text-red-600">
-                                !
-                            </div>
-
-                            <h1 className="mt-5 text-2xl font-bold tracking-tight text-gray-950">
-                                Unable to create an event
-                            </h1>
-
-                            <p className="mt-2 text-sm leading-6 text-red-600">
-                                {error ||
-                                    "You must be logged in to create events."}
-                            </p>
-
-                            <Link
-                                href="/events"
-                                className="mt-6 inline-flex items-center rounded-xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-800 transition hover:bg-gray-50"
-                            >
-                                ← Back to Events
-                            </Link>
+                        <BackLink href="/events">All events</BackLink>
+                        <div className="mt-6">
+                            <Notice tone="error" title="Can't create an event right now">
+                                {error || "You must be logged in to create events."}
+                            </Notice>
                         </div>
                     </div>
                 </main>
@@ -301,593 +251,386 @@ export default function CreateEventPage() {
 
     const today = startOfDay(new Date());
 
-    const inputClass =
-        "w-full rounded-xl border border-gray-300 bg-white px-4 py-3.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10";
-
-    const selectClass =
-        "w-full rounded-xl border border-gray-300 bg-white px-3.5 py-3 text-sm font-medium text-gray-900 outline-none transition focus:border-gray-950 focus:ring-4 focus:ring-gray-950/10";
+    const previewStart = createDateTime(startDate, startHour, startMinute, startPeriod);
+    const previewEnd = createDateTime(endDate, endHour, endMinute, endPeriod);
 
     return (
         <>
             <Navbar />
 
-            <main className="min-h-screen bg-gray-50 px-5 py-10 sm:px-8 md:py-14">
-                <div className="mx-auto max-w-3xl">
+            <main className="flex-1 px-4 pb-20 pt-6 sm:px-8">
+                <div className="mx-auto max-w-6xl">
+                    <BackLink href="/events">All events</BackLink>
 
-                    {/* Back link */}
-                    <Link
-                        href="/events"
-                        className="inline-flex items-center gap-2 text-sm font-semibold text-gray-500 transition hover:text-gray-950"
-                    >
-                        <span>←</span>
-                        Back to Events
-                    </Link>
-
-                    {/* Header */}
-                    <div className="mt-8 mb-8">
-                        <p className="text-xs font-bold uppercase tracking-[0.18em] text-gray-400">
-                            Event Management
-                        </p>
-
-                        <h1 className="mt-3 text-4xl font-bold tracking-tight text-gray-950 sm:text-5xl">
-                            Create an event
+                    <header className="mb-10 mt-6">
+                        <p className="eyebrow">New listing</p>
+                        <h1 className="display mt-3 text-5xl sm:text-6xl">
+                            Pin up an <span className="mark">event</span>
                         </h1>
-
-                        <p className="mt-4 max-w-2xl text-base leading-7 text-gray-600">
-                            Add the details below to create an event for
-                            your campus community.
+                        <p className="mt-4 max-w-xl text-lg leading-8 text-ink-soft">
+                            It&apos;s saved as a draft first. Nobody sees it
+                            until you hit publish.
                         </p>
-                    </div>
+                    </header>
 
-                    {/* Form card */}
-                    <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-                        <form
-                            onSubmit={handleCreateEvent}
-                            className="divide-y divide-gray-100"
-                        >
-                            {/* Basic information */}
-                            <section className="p-6 sm:p-8">
-                                <div className="mb-7">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-950 text-sm font-bold text-white">
-                                            1
-                                        </div>
+                    {success && (
+                        <div className="mb-8">
+                            <Notice
+                                tone="success"
+                                title={`“${success}” is saved as a draft`}
+                                action={
+                                    <Link href="/events/my-events" className="btn btn-primary btn-sm">
+                                        Review & publish
+                                        <ArrowRightIcon size={15} strokeWidth={2.5} />
+                                    </Link>
+                                }
+                            >
+                                Head to your hosting desk to publish it when
+                                you&apos;re ready, or post another below.
+                            </Notice>
+                        </div>
+                    )}
 
-                                        <div>
-                                            <h2 className="text-lg font-bold text-gray-950">
-                                                Basic information
-                                            </h2>
-
-                                            <p className="text-sm text-gray-500">
-                                                Tell people what your event is
-                                                about.
-                                            </p>
-                                        </div>
-                                    </div>
+                    <div className="grid gap-10 lg:grid-cols-[1fr_340px]">
+                        <form onSubmit={handleCreateEvent} className="space-y-8">
+                            <Step n="1" title="The basics" hint="What is it, and where?">
+                                <div>
+                                    <label htmlFor="event-title" className="field-label">
+                                        Event title
+                                    </label>
+                                    <input
+                                        id="event-title"
+                                        type="text"
+                                        value={title}
+                                        onChange={(e) => setTitle(e.target.value)}
+                                        placeholder="e.g. Intro to screen printing"
+                                        required
+                                        maxLength={120}
+                                        className="field font-display text-lg font-bold"
+                                    />
                                 </div>
 
-                                <div className="space-y-6">
-                                    {/* Title */}
-                                    <div>
-                                        <label
-                                            htmlFor="event-title"
-                                            className="mb-2 block text-sm font-semibold text-gray-800"
-                                        >
-                                            Event title
-                                        </label>
-
-                                        <input
-                                            id="event-title"
-                                            type="text"
-                                            value={title}
-                                            onChange={(event) =>
-                                                setTitle(
-                                                    event.target.value
-                                                )
-                                            }
-                                            placeholder="e.g. Tech Innovation Conference"
-                                            required
-                                            className={inputClass}
-                                        />
-                                    </div>
-
-                                    {/* Description */}
-                                    <div>
-                                        <label
-                                            htmlFor="event-description"
-                                            className="mb-2 block text-sm font-semibold text-gray-800"
-                                        >
-                                            Description
-                                        </label>
-
-                                        <textarea
-                                            id="event-description"
-                                            value={description}
-                                            onChange={(event) =>
-                                                setDescription(
-                                                    event.target.value
-                                                )
-                                            }
-                                            placeholder="Describe what attendees can expect from the event..."
-                                            required
-                                            rows={5}
-                                            className={`${inputClass} resize-y`}
-                                        />
-
-                                        <p className="mt-2 text-xs text-gray-400">
-                                            Give attendees enough information
-                                            to understand the purpose of the
-                                            event.
-                                        </p>
-                                    </div>
-
-                                    {/* Location */}
-                                    <div>
-                                        <label
-                                            htmlFor="event-location"
-                                            className="mb-2 block text-sm font-semibold text-gray-800"
-                                        >
-                                            Location
-                                        </label>
-
-                                        <input
-                                            id="event-location"
-                                            type="text"
-                                            value={location}
-                                            onChange={(event) =>
-                                                setLocation(
-                                                    event.target.value
-                                                )
-                                            }
-                                            placeholder="e.g. Academic City Auditorium"
-                                            required
-                                            className={inputClass}
-                                        />
-                                    </div>
-                                </div>
-                            </section>
-
-                            {/* Schedule */}
-                            <section className="p-6 sm:p-8">
-                                <div className="mb-7">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-950 text-sm font-bold text-white">
-                                            2
-                                        </div>
-
-                                        <div>
-                                            <h2 className="text-lg font-bold text-gray-950">
-                                                Event schedule
-                                            </h2>
-
-                                            <p className="text-sm text-gray-500">
-                                                Choose when your event starts
-                                                and ends.
-                                            </p>
-                                        </div>
-                                    </div>
+                                <div>
+                                    <label htmlFor="event-description" className="field-label">
+                                        Description
+                                    </label>
+                                    <textarea
+                                        id="event-description"
+                                        value={description}
+                                        onChange={(e) => setDescription(e.target.value)}
+                                        placeholder="What will people do, learn or get out of it? Anything to bring?"
+                                        required
+                                        rows={5}
+                                        className="field resize-y"
+                                        aria-describedby="desc-hint"
+                                    />
+                                    <p id="desc-hint" className="field-hint">
+                                        Two or three sentences is plenty.
+                                    </p>
                                 </div>
 
-                                <div className="space-y-7">
-                                    {/* Start */}
-                                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 sm:p-6">
-                                        <div className="mb-5">
-                                            <p className="text-sm font-bold text-gray-950">
-                                                Start date & time
-                                            </p>
-
-                                            <p className="mt-1 text-xs leading-5 text-gray-500">
-                                                Choose when your event begins.
-                                            </p>
-                                        </div>
-
-                                        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white p-3">
-                                            <DayPicker
-                                                mode="single"
-                                                selected={startDate}
-                                                onSelect={setStartDate}
-                                                disabled={{
-                                                    before: today,
-                                                }}
-                                                defaultMonth={
-                                                    startDate || today
-                                                }
-                                            />
-                                        </div>
-
-                                        <div className="mt-5 grid grid-cols-3 gap-3">
-                                            <div>
-                                                <label
-                                                    htmlFor="start-hour"
-                                                    className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500"
-                                                >
-                                                    Hour
-                                                </label>
-
-                                                <select
-                                                    id="start-hour"
-                                                    value={startHour}
-                                                    onChange={(event) =>
-                                                        setStartHour(
-                                                            event.target.value
-                                                        )
-                                                    }
-                                                    className={selectClass}
-                                                >
-                                                    {Array.from(
-                                                        { length: 12 },
-                                                        (_, index) => {
-                                                            const hour =
-                                                                String(
-                                                                    index + 1
-                                                                ).padStart(
-                                                                    2,
-                                                                    "0"
-                                                                );
-
-                                                            return (
-                                                                <option
-                                                                    key={hour}
-                                                                    value={hour}
-                                                                >
-                                                                    {hour}
-                                                                </option>
-                                                            );
-                                                        }
-                                                    )}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label
-                                                    htmlFor="start-minute"
-                                                    className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500"
-                                                >
-                                                    Minute
-                                                </label>
-
-                                                <select
-                                                    id="start-minute"
-                                                    value={startMinute}
-                                                    onChange={(event) =>
-                                                        setStartMinute(
-                                                            event.target.value
-                                                        )
-                                                    }
-                                                    className={selectClass}
-                                                >
-                                                    {[
-                                                        "00",
-                                                        "15",
-                                                        "30",
-                                                        "45",
-                                                    ].map((minute) => (
-                                                        <option
-                                                            key={minute}
-                                                            value={minute}
-                                                        >
-                                                            {minute}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label
-                                                    htmlFor="start-period"
-                                                    className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500"
-                                                >
-                                                    Period
-                                                </label>
-
-                                                <select
-                                                    id="start-period"
-                                                    value={startPeriod}
-                                                    onChange={(event) =>
-                                                        setStartPeriod(
-                                                            event.target.value
-                                                        )
-                                                    }
-                                                    className={selectClass}
-                                                >
-                                                    <option value="AM">
-                                                        AM
-                                                    </option>
-
-                                                    <option value="PM">
-                                                        PM
-                                                    </option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
-                                            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                Selected start
-                                            </p>
-
-                                            <p className="mt-1 text-sm font-semibold text-gray-900">
-                                                {formatSelectedDateTime(
-                                                    startDate,
-                                                    startHour,
-                                                    startMinute,
-                                                    startPeriod
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* End */}
-                                    <div className="rounded-2xl border border-gray-200 bg-gray-50 p-5 sm:p-6">
-                                        <div className="mb-5">
-                                            <p className="text-sm font-bold text-gray-950">
-                                                End date & time
-                                            </p>
-
-                                            <p className="mt-1 text-xs leading-5 text-gray-500">
-                                                Choose when your event ends.
-                                            </p>
-                                        </div>
-
-                                        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white p-3">
-                                            <DayPicker
-                                                mode="single"
-                                                selected={endDate}
-                                                onSelect={setEndDate}
-                                                disabled={{
-                                                    before:
-                                                        startDate || today,
-                                                }}
-                                                defaultMonth={
-                                                    endDate ||
-                                                    startDate ||
-                                                    today
-                                                }
-                                            />
-                                        </div>
-
-                                        <div className="mt-5 grid grid-cols-3 gap-3">
-                                            <div>
-                                                <label
-                                                    htmlFor="end-hour"
-                                                    className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500"
-                                                >
-                                                    Hour
-                                                </label>
-
-                                                <select
-                                                    id="end-hour"
-                                                    value={endHour}
-                                                    onChange={(event) =>
-                                                        setEndHour(
-                                                            event.target.value
-                                                        )
-                                                    }
-                                                    className={selectClass}
-                                                >
-                                                    {Array.from(
-                                                        { length: 12 },
-                                                        (_, index) => {
-                                                            const hour =
-                                                                String(
-                                                                    index + 1
-                                                                ).padStart(
-                                                                    2,
-                                                                    "0"
-                                                                );
-
-                                                            return (
-                                                                <option
-                                                                    key={hour}
-                                                                    value={hour}
-                                                                >
-                                                                    {hour}
-                                                                </option>
-                                                            );
-                                                        }
-                                                    )}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label
-                                                    htmlFor="end-minute"
-                                                    className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500"
-                                                >
-                                                    Minute
-                                                </label>
-
-                                                <select
-                                                    id="end-minute"
-                                                    value={endMinute}
-                                                    onChange={(event) =>
-                                                        setEndMinute(
-                                                            event.target.value
-                                                        )
-                                                    }
-                                                    className={selectClass}
-                                                >
-                                                    {[
-                                                        "00",
-                                                        "15",
-                                                        "30",
-                                                        "45",
-                                                    ].map((minute) => (
-                                                        <option
-                                                            key={minute}
-                                                            value={minute}
-                                                        >
-                                                            {minute}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label
-                                                    htmlFor="end-period"
-                                                    className="mb-2 block text-xs font-bold uppercase tracking-wide text-gray-500"
-                                                >
-                                                    Period
-                                                </label>
-
-                                                <select
-                                                    id="end-period"
-                                                    value={endPeriod}
-                                                    onChange={(event) =>
-                                                        setEndPeriod(
-                                                            event.target.value
-                                                        )
-                                                    }
-                                                    className={selectClass}
-                                                >
-                                                    <option value="AM">
-                                                        AM
-                                                    </option>
-
-                                                    <option value="PM">
-                                                        PM
-                                                    </option>
-                                                </select>
-                                            </div>
-                                        </div>
-
-                                        <div className="mt-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
-                                            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-gray-400">
-                                                Selected end
-                                            </p>
-
-                                            <p className="mt-1 text-sm font-semibold text-gray-900">
-                                                {formatSelectedDateTime(
-                                                    endDate,
-                                                    endHour,
-                                                    endMinute,
-                                                    endPeriod
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
+                                <div>
+                                    <label htmlFor="event-location" className="field-label">
+                                        Location
+                                    </label>
+                                    <input
+                                        id="event-location"
+                                        type="text"
+                                        value={location}
+                                        onChange={(e) => setLocation(e.target.value)}
+                                        placeholder="e.g. Art Block, Studio 2"
+                                        required
+                                        className="field"
+                                    />
                                 </div>
-                            </section>
+                            </Step>
 
-                            {/* Capacity */}
-                            <section className="p-6 sm:p-8">
-                                <div className="mb-7">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-950 text-sm font-bold text-white">
-                                            3
-                                        </div>
-
-                                        <div>
-                                            <h2 className="text-lg font-bold text-gray-950">
-                                                Attendance
-                                            </h2>
-
-                                            <p className="text-sm text-gray-500">
-                                                Set the maximum number of
-                                                attendees.
-                                            </p>
-                                        </div>
-                                    </div>
+                            <Step n="2" title="When" hint="Pick a start, then an end.">
+                                <div className="grid gap-6 xl:grid-cols-2">
+                                    <WhenPicker
+                                        label="Starts"
+                                        idPrefix="start"
+                                        date={startDate}
+                                        onDate={handleStartSelect}
+                                        disabledBefore={today}
+                                        hour={startHour}
+                                        minute={startMinute}
+                                        period={startPeriod}
+                                        onHour={setStartHour}
+                                        onMinute={setStartMinute}
+                                        onPeriod={setStartPeriod}
+                                        summary={formatSelectedDateTime(
+                                            startDate,
+                                            startHour,
+                                            startMinute,
+                                            startPeriod
+                                        )}
+                                    />
+                                    <WhenPicker
+                                        label="Ends"
+                                        idPrefix="end"
+                                        date={endDate}
+                                        onDate={setEndDate}
+                                        disabledBefore={startDate || today}
+                                        hour={endHour}
+                                        minute={endMinute}
+                                        period={endPeriod}
+                                        onHour={setEndHour}
+                                        onMinute={setEndMinute}
+                                        onPeriod={setEndPeriod}
+                                        summary={formatSelectedDateTime(
+                                            endDate,
+                                            endHour,
+                                            endMinute,
+                                            endPeriod
+                                        )}
+                                    />
                                 </div>
+                            </Step>
 
-                                <div className="max-w-sm">
-                                    <label
-                                        htmlFor="event-capacity"
-                                        className="mb-2 block text-sm font-semibold text-gray-800"
-                                    >
+                            <Step n="3" title="Head count" hint="How many people can you fit?">
+                                <div className="max-w-xs">
+                                    <label htmlFor="event-capacity" className="field-label">
                                         Capacity
                                     </label>
-
                                     <input
                                         id="event-capacity"
                                         type="number"
+                                        inputMode="numeric"
                                         value={capacity}
-                                        onChange={(event) =>
-                                            setCapacity(
-                                                event.target.value
-                                            )
-                                        }
-                                        placeholder="e.g. 100"
+                                        onChange={(e) => setCapacity(e.target.value)}
+                                        placeholder="e.g. 40"
                                         min="1"
                                         required
-                                        className={inputClass}
+                                        className="field"
+                                        aria-describedby="cap-hint"
                                     />
-
-                                    <p className="mt-2 text-xs leading-5 text-gray-400">
-                                        This determines the maximum number
-                                        of people who can register.
+                                    <p id="cap-hint" className="field-hint">
+                                        Registration stops once this many people sign up.
                                     </p>
                                 </div>
-                            </section>
+                            </Step>
 
-                            {/* Messages + submit */}
-                            <section className="bg-gray-50 p-6 sm:p-8">
-                                {error && (
-                                    <div
-                                        role="alert"
-                                        className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3.5 text-sm leading-6 text-red-700"
-                                    >
-                                        <div className="font-semibold">
-                                            Could not create event
-                                        </div>
+                            {error && (
+                                <Notice tone="error" title="Couldn't create the event">
+                                    {error}
+                                </Notice>
+                            )}
 
-                                        <div className="mt-1">
-                                            {error}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {success && (
-                                    <div
-                                        role="status"
-                                        className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3.5 text-sm leading-6 text-emerald-700"
-                                    >
-                                        <div className="font-semibold">
-                                            Event created successfully
-                                        </div>
-
-                                        <div className="mt-1">
-                                            {success}
-                                        </div>
-
-                                        <Link
-                                            href="/events/my-events"
-                                            className="mt-2 inline-block font-semibold underline underline-offset-4 hover:no-underline"
-                                        >
-                                            View My Events
-                                        </Link>
-                                    </div>
-                                )}
-
-                                <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                                    <Link
-                                        href="/events"
-                                        className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-6 py-3.5 text-sm font-semibold text-gray-700 transition hover:bg-gray-100"
-                                    >
-                                        Cancel
-                                    </Link>
-
-                                    <button
-                                        type="submit"
-                                        disabled={loading}
-                                        className="inline-flex items-center justify-center rounded-xl bg-gray-950 px-7 py-3.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-50"
-                                    >
-                                        {loading
-                                            ? "Creating Event..."
-                                            : "Create Event"}
-                                    </button>
-                                </div>
-                            </section>
+                            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                <Link href="/events" className="btn btn-ghost btn-lg">
+                                    Discard
+                                </Link>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="btn btn-primary btn-lg"
+                                >
+                                    {loading ? (
+                                        <>
+                                            <SpinnerIcon size={18} />
+                                            Saving draft…
+                                        </>
+                                    ) : (
+                                        <>
+                                            Save as draft
+                                            <ArrowRightIcon size={18} strokeWidth={2.5} />
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </form>
-                    </div>
 
-                    <p className="mt-6 text-center text-xs leading-5 text-gray-400">
-                        Your event will be created as a draft. You can
-                        review and publish it from My Events.
-                    </p>
+                        {/* Live preview */}
+                        <aside className="hidden lg:block" aria-label="Preview">
+                            <div className="sticky top-24">
+                                <p className="eyebrow mb-4">Live preview</p>
+                                <div className="ticket flex rotate-1">
+                                    <div className="flex w-24 shrink-0 items-center justify-center border-r-2 border-dashed border-ink bg-paper/60 py-6">
+                                        {previewStart ? (
+                                            <DateStub value={previewStart.toISOString()} />
+                                        ) : (
+                                            <span className="font-display text-4xl font-extrabold text-line">
+                                                ?
+                                            </span>
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1 p-5">
+                                        <span className="inline-flex rounded-md border-[1.5px] border-dashed border-ink bg-sun-wash px-2 py-0.5 font-mono text-[0.7rem] font-semibold uppercase tracking-[0.12em]">
+                                            Draft
+                                        </span>
+                                        <p
+                                            className={`mt-3 break-words font-display text-xl font-extrabold leading-tight ${
+                                                title ? "" : "text-ink-mute"
+                                            }`}
+                                        >
+                                            {title || "Your event title"}
+                                        </p>
+                                        <p className="mt-2 line-clamp-3 text-sm leading-6 text-ink-soft">
+                                            {description || "A short description will appear here."}
+                                        </p>
+                                        <ul className="mt-4 space-y-1.5 text-sm">
+                                            <li className="flex items-center gap-2">
+                                                <ClockIcon size={15} className="text-ink-mute" />
+                                                {previewStart
+                                                    ? `${format(previewStart, "h:mm a")}${
+                                                          previewEnd ? ` – ${format(previewEnd, "h:mm a")}` : ""
+                                                      }`
+                                                    : "Time TBC"}
+                                            </li>
+                                            <li className="flex min-w-0 items-center gap-2">
+                                                <PinIcon size={15} className="shrink-0 text-ink-mute" />
+                                                <span className="truncate">{location || "Location TBC"}</span>
+                                            </li>
+                                            <li className="flex items-center gap-2">
+                                                <UsersIcon size={15} className="text-ink-mute" />
+                                                {Number(capacity) > 0
+                                                    ? plural(Number(capacity), "spot")
+                                                    : "Capacity TBC"}
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                <p className="mt-6 text-sm leading-6 text-ink-mute">
+                                    This is roughly how it&apos;ll look on the
+                                    board once published.
+                                </p>
+                            </div>
+                        </aside>
+                    </div>
                 </div>
             </main>
         </>
+    );
+}
+
+function Step({
+    n,
+    title,
+    hint,
+    children,
+}: {
+    n: string;
+    title: string;
+    hint: string;
+    children: ReactNode;
+}) {
+    return (
+        <fieldset className="panel p-6 sm:p-8">
+            <legend className="sr-only">{title}</legend>
+            <div className="mb-7 flex items-center gap-4" aria-hidden="true">
+                <span className="flex h-11 w-11 -rotate-6 items-center justify-center rounded-xl border-2 border-ink bg-sun font-display text-xl font-extrabold">
+                    {n}
+                </span>
+                <div>
+                    <p className="font-display text-2xl font-extrabold leading-none tracking-tight">
+                        {title}
+                    </p>
+                    <p className="mt-1 text-sm text-ink-mute">{hint}</p>
+                </div>
+            </div>
+            <div className="space-y-6">{children}</div>
+        </fieldset>
+    );
+}
+
+function WhenPicker({
+    label,
+    idPrefix,
+    date,
+    onDate,
+    disabledBefore,
+    hour,
+    minute,
+    period,
+    onHour,
+    onMinute,
+    onPeriod,
+    summary,
+}: {
+    label: string;
+    idPrefix: string;
+    date: Date | undefined;
+    onDate: (d: Date | undefined) => void;
+    disabledBefore: Date;
+    hour: string;
+    minute: string;
+    period: string;
+    onHour: (v: string) => void;
+    onMinute: (v: string) => void;
+    onPeriod: (v: string) => void;
+    summary: string;
+}) {
+    return (
+        <div className="rounded-2xl border-2 border-ink bg-paper/50 p-4">
+            <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-signal-deep">
+                {label}
+            </p>
+
+            <div className="mt-2 overflow-x-auto">
+                <DayPicker
+                    mode="single"
+                    selected={date}
+                    onSelect={onDate}
+                    disabled={{ before: disabledBefore }}
+                    defaultMonth={date || disabledBefore}
+                />
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2">
+                <div>
+                    <label htmlFor={`${idPrefix}-hour`} className="eyebrow mb-1.5 block !text-[0.65rem]">
+                        Hour
+                    </label>
+                    <select
+                        id={`${idPrefix}-hour`}
+                        value={hour}
+                        onChange={(e) => onHour(e.target.value)}
+                        className="field !min-h-11 !px-3 !py-2"
+                    >
+                        {HOURS.map((h) => (
+                            <option key={h} value={h}>
+                                {h}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor={`${idPrefix}-minute`} className="eyebrow mb-1.5 block !text-[0.65rem]">
+                        Min
+                    </label>
+                    <select
+                        id={`${idPrefix}-minute`}
+                        value={minute}
+                        onChange={(e) => onMinute(e.target.value)}
+                        className="field !min-h-11 !px-3 !py-2"
+                    >
+                        {MINUTES.map((m) => (
+                            <option key={m} value={m}>
+                                {m}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+                <div>
+                    <label htmlFor={`${idPrefix}-period`} className="eyebrow mb-1.5 block !text-[0.65rem]">
+                        AM/PM
+                    </label>
+                    <select
+                        id={`${idPrefix}-period`}
+                        value={period}
+                        onChange={(e) => onPeriod(e.target.value)}
+                        className="field !min-h-11 !px-3 !py-2"
+                    >
+                        <option value="AM">AM</option>
+                        <option value="PM">PM</option>
+                    </select>
+                </div>
+            </div>
+
+            <p className="mt-3 rounded-lg bg-card px-3 py-2 text-sm font-semibold" aria-live="polite">
+                {summary}
+            </p>
+        </div>
     );
 }
